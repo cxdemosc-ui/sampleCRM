@@ -1,24 +1,45 @@
 // Your Supabase project info and RPC endpoints
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
 const RPC_BASE_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/`;
-// Insert your full API key here
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A';
 const AUTH_TOKEN = API_KEY;
 
 const ENDPOINTS = {
   getCustomer: RPC_BASE_URL + 'get_customer_full_view',
   updateCustomer: RPC_BASE_URL + 'update_customer_data_by_mobile_or_account',
-  createServiceRequest: RPC_BASE_URL + 'create_service_request',     // TODO: Implement backend RPC
-  updateServiceRequest: RPC_BASE_URL + 'update_service_request_status' // TODO: Implement backend RPC
+  createServiceRequest: RPC_BASE_URL + 'create_service_request',     // TODO: Add backend impl
+  updateServiceRequest: RPC_BASE_URL + 'update_service_request_status' // TODO: Add backend impl
 };
 
-// Helper: mask card number except last 4 digits
+// Helper to format DOB and other dates as dd-mm-yyyy
+function formatDateDMY(dtStr) {
+  if (!dtStr) return 'N/A';
+  const d = new Date(dtStr);
+  if (isNaN(d)) return 'N/A';
+  // Format as DD-MM-YYYY
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+}
+
+// Helper to format time as HH:mm (24h)
+function formatTimeHM(dtStr) {
+  if (!dtStr) return 'N/A';
+  const d = new Date(dtStr);
+  if (isNaN(d)) return 'N/A';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+// Mask card number to show only last 4 digits
 function maskCard(num) {
   if (!num || num.length < 4) return '';
   return '**** **** **** ' + num.slice(-4);
 }
 
-// Helper: show status message
+// Show message in alert bar
 function showMessage(message, type = 'info') {
   const msgDiv = document.getElementById('messageBar');
   msgDiv.innerText = message;
@@ -26,13 +47,14 @@ function showMessage(message, type = 'info') {
   msgDiv.style.display = 'block';
 }
 
-// Fetch customer data based on identifier
+// Fetch customer full view (mobile or account search)
 async function fetchCustomer(identifier) {
-  const body = /^\d{8}$/.test(identifier)
+  const isAccountNumber = /^\d{8}$/.test(identifier);
+  const body = isAccountNumber
     ? { p_mobile_no: null, p_account_number: identifier }
     : { p_mobile_no: identifier, p_account_number: null };
 
-  console.log('Fetching customer with payload:', body);
+  console.log('[fetchCustomer] Payload:', body);
 
   const response = await fetch(ENDPOINTS.getCustomer, {
     method: 'POST',
@@ -51,7 +73,7 @@ async function fetchCustomer(identifier) {
   return await response.json();
 }
 
-// Update customer basic info
+// Update customer contact info
 async function updateCustomer(form, mobileNo, accountNo) {
   const updatePayload = {
     p_mobile_no: mobileNo,
@@ -59,10 +81,10 @@ async function updateCustomer(form, mobileNo, accountNo) {
     p_address: form.address.value,
     p_city: form.city.value,
     p_mobile_no2: form.mobile_no2.value,
-    p_email: form.email.value
+    p_email: form.email.value,
   };
 
-  console.log('Updating customer with payload: ', updatePayload);
+  console.log('[updateCustomer] Payload:', updatePayload);
 
   const response = await fetch(ENDPOINTS.updateCustomer, {
     method: 'POST',
@@ -71,7 +93,7 @@ async function updateCustomer(form, mobileNo, accountNo) {
       Authorization: `Bearer ${AUTH_TOKEN}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(updatePayload)
+    body: JSON.stringify(updatePayload),
   });
 
   if (!response.ok) {
@@ -81,21 +103,18 @@ async function updateCustomer(form, mobileNo, accountNo) {
   return await response.json();
 }
 
-// Placeholder for creating service request
+// Placeholder backend calls for service requests
 async function createServiceRequest(customerId, description) {
   showMessage('Creating service request (placeholder)', 'info');
-  // TODO: Implement your backend call here.
-  return true; // Simulate success.
+  // TODO: Implement backend RPC here
+  return true;
 }
-
-// Placeholder for updating service request status
 async function updateServiceRequestStatus(requestId, status) {
   showMessage('Updating service request status (placeholder)', 'info');
-  // TODO: Implement your backend call here.
-  return true; // Simulate success.
+  // TODO: Implement backend RPC here
+  return true;
 }
 
-// Main function to render fetched customer data and setup event handlers
 async function showCustomer(data) {
   const detailsDiv = document.getElementById('customer-details');
   const msgDiv = document.getElementById('messageBar');
@@ -122,12 +141,9 @@ async function showCustomer(data) {
     accountNumbersDisplay = data.account_number;
   }
 
-  // Recent transactions (from top level)
   const recentTransactions = data.recent_transactions || [];
-  // Debit and credit cards arrays
   const debitCards = data.debit_cards || [];
   const creditCards = data.credit_cards || [];
-  // Service requests
   const serviceRequests = data.service_requests || [];
 
   detailsDiv.innerHTML = `
@@ -136,7 +152,7 @@ async function showCustomer(data) {
       <div class="form-row mb-2">
         <div class="col">
           <label>DOB</label>
-          <div class="readonly-field">${info.dob || 'N/A'}</div>
+          <div class="readonly-field">${formatDateDMY(info.dob)}</div>
         </div>
         <div class="col">
           <label>Account Number(s)</label>
@@ -147,78 +163,129 @@ async function showCustomer(data) {
           <div class="readonly-field">${balanceDisplay}</div>
         </div>
       </div>
+
       <div class="form-group">
         <label>Email</label>
         <input name="email" type="email" class="form-control" value="${info.email || ''}" />
       </div>
+
       <div class="form-group">
         <label>Address</label>
         <input name="address" type="text" class="form-control" value="${info.address || ''}" />
       </div>
+
       <div class="form-group">
         <label>City</label>
         <input name="city" type="text" class="form-control" value="${info.city || ''}" />
       </div>
+
       <div class="form-group">
         <label>Mobile No 2</label>
         <input name="mobile_no2" type="text" class="form-control" value="${info.mobile_no2 || ''}" />
       </div>
+
       <button type="submit" class="btn btn-primary">Update Customer Info</button>
     </form>
 
     <h4>Recent Transactions</h4>
     <div class="table-responsive">
       <table class="table table-sm table-bordered">
-        <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Description</th></tr></thead>
+        <thead>
+          <tr><th>Date</th><th>Time</th><th>Type</th><th>Amount</th><th>Reference Note</th></tr>
+        </thead>
         <tbody>
-          ${recentTransactions.length > 0 ? recentTransactions.map(tx =>
-    `<tr>
-          <td>${new Date(tx.transaction_date).toLocaleDateString()}</td>
-          <td>${tx.transaction_type || ''}</td>
-          <td>${tx.amount ?? ''}</td>
-          <td>${tx.description || ''}</td>
-        </tr>`).join('') : `<tr><td colspan="4">No transactions available</td></tr>`}
+          ${
+            recentTransactions.length > 0
+              ? recentTransactions.map(tx => `
+            <tr>
+              <td>${formatDateDMY(tx.transaction_date)}</td>
+              <td>${formatTimeHM(tx.transaction_date)}</td>
+              <td>${tx.transaction_type || ''}</td>
+              <td>${tx.amount ?? ''}</td>
+              <td>${tx.reference_note || ''}</td>
+            </tr>
+          `).join('')
+              : `<tr><td colspan="5">No transactions available</td></tr>`
+          }
         </tbody>
       </table>
     </div>
 
     <h4>Debit Cards</h4>
-    ${debitCards.length > 0 ? debitCards.map(dc => `
+    ${
+      debitCards.length > 0
+        ? debitCards.map(dc => `
       <div class="card p-3 mb-2">
         <p><strong>Card Number:</strong> ${maskCard(dc.card_number)}</p>
         <p><strong>Status:</strong> ${dc.status || ''}</p>
-        <h6>Transactions (if available)</h6>
-        ${(dc.transactions && dc.transactions.length > 0) ? `
-          <ul class="small">
-            ${dc.transactions.map(t => `<li>${new Date(t.transaction_date).toLocaleDateString()}: ${t.description} - ${t.amount}</li>`).join('')}
-          </ul>` : '<small>No transactions available</small>'}
-        <div class="btn-group mt-2">
+        <h6>Transactions</h6>
+        ${
+          dc.transactions && dc.transactions.length > 0
+            ? `
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead><tr><th>Date</th><th>Description</th><th>Amount</th></tr></thead>
+              <tbody>
+                ${dc.transactions.map(t => `
+                  <tr>
+                    <td>${formatDateDMY(t.transaction_date)}</td>
+                    <td>${t.reference_note || t.description || ''}</td>
+                    <td>${t.amount}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>`
+            : '<small>No transactions available</small>'
+        }
+        <div class="btn-group btn-action-group mt-2" role="group">
           <button class="btn btn-warning btn-block-card" data-type="debit" data-no="${dc.card_number}">Block</button>
           <button class="btn btn-info btn-reissue-card" data-type="debit" data-no="${dc.card_number}">Reissue</button>
           <button class="btn btn-danger btn-mark-lost" data-type="debit" data-no="${dc.card_number}">Mark Lost</button>
           <button class="btn btn-secondary btn-dispute" data-type="debit" data-no="${dc.card_number}">Dispute</button>
         </div>
       </div>
-    `).join('') : '<p>No debit cards found</p>'}
+    `).join('')
+        : '<p>No debit cards found</p>'
+    }
 
     <h4>Credit Cards</h4>
-    ${creditCards.length > 0 ? creditCards.map(cc => `
+    ${
+      creditCards.length > 0
+        ? creditCards.map(cc => `
       <div class="card p-3 mb-2">
         <p><strong>Card Number:</strong> ${maskCard(cc.card_number)}</p>
         <p><strong>Status:</strong> ${cc.status || ''}</p>
-        <h6>Transactions (if available)</h6>
-        ${(cc.transactions && cc.transactions.length > 0) ? `
-          <ul class="small">
-            ${cc.transactions.map(t => `<li>${new Date(t.transaction_date).toLocaleDateString()}: ${t.description} - ${t.amount}</li>`).join('')}
-          </ul>` : '<small>No transactions available</small>'}
-        <div class="btn-group mt-2">
+        <h6>Transactions</h6>
+        ${
+          cc.transactions && cc.transactions.length > 0
+            ? `
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead><tr><th>Date</th><th>Description</th><th>Amount</th></tr></thead>
+              <tbody>
+                ${cc.transactions.map(t => `
+                  <tr>
+                    <td>${formatDateDMY(t.transaction_date)}</td>
+                    <td>${t.reference_note || t.description || ''}</td>
+                    <td>${t.amount}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>`
+            : '<small>No transactions available</small>'
+        }
+        <div class="btn-group btn-action-group mt-2" role="group">
           <button class="btn btn-warning btn-block-card" data-type="credit" data-no="${cc.card_number}">Block</button>
           <button class="btn btn-info btn-reissue-card" data-type="credit" data-no="${cc.card_number}">Reissue</button>
           <button class="btn btn-danger btn-mark-lost" data-type="credit" data-no="${cc.card_number}">Mark Lost</button>
           <button class="btn btn-secondary btn-dispute" data-type="credit" data-no="${cc.card_number}">Dispute</button>
         </div>
       </div>
-    `).join('') : '<p>No credit cards found</p>'}
+    `).join('')
+        : '<p>No credit cards found</p>'
+    }
 
     <h4>Service Requests</h4>
     <button id="newServiceRequestBtn" class="btn btn-success mb-2">Create New Service Request</button>
@@ -228,17 +295,22 @@ async function showCustomer(data) {
           <tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th><th>Actions</th></tr>
         </thead>
         <tbody>
-          ${serviceRequests.length > 0 ? serviceRequests.map(sr => `
+          ${
+            serviceRequests.length > 0
+              ? serviceRequests.map(sr => `
             <tr>
               <td>${sr.request_id}</td>
               <td>${sr.request_type || ''}</td>
               <td>${sr.status || ''}</td>
-              <td>${new Date(sr.raised_date).toLocaleDateString()}</td>
+              <td>${formatDateDMY(sr.raised_date)}</td>
               <td>
                 <button class="btn btn-sm btn-primary btn-update-sr" data-id="${sr.request_id}">Update</button>
                 <button class="btn btn-sm btn-danger btn-close-sr" data-id="${sr.request_id}">Close</button>
               </td>
-            </tr>`).join('') : `<tr><td colspan="5">No service requests found</td></tr>`}
+            </tr>
+          `).join('')
+              : `<tr><td colspan="5">No service requests found</td></tr>`
+          }
         </tbody>
       </table>
     </div>
@@ -264,7 +336,7 @@ async function showCustomer(data) {
     </div>
   `;
 
-  // Bind event handlers
+  // ------ EVENT BINDING FOR INTERACTIONS --------
 
   const updateForm = detailsDiv.querySelector('#updateForm');
   updateForm.onsubmit = async e => {
@@ -311,15 +383,14 @@ async function showCustomer(data) {
     }
   };
 
-  // Update and close buttons for service requests (placeholders)
   detailsDiv.querySelectorAll('.btn-update-sr').forEach(btn => {
-    btn.onclick = () => alert(`Update request #${btn.dataset.id} - implement UI & API`);
-  });
-  detailsDiv.querySelectorAll('.btn-close-sr').forEach(btn => {
-    btn.onclick = () => alert(`Close request #${btn.dataset.id} - implement UI & API`);
+    btn.onclick = () => alert(`Update service request #${btn.dataset.id} - To implement`);
   });
 
-  // Card action buttons placeholder handlers
+  detailsDiv.querySelectorAll('.btn-close-sr').forEach(btn => {
+    btn.onclick = () => alert(`Close service request #${btn.dataset.id} - To implement`);
+  });
+
   detailsDiv.querySelectorAll('.btn-block-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute').forEach(button => {
     button.onclick = () => {
       const type = button.getAttribute('data-type');
@@ -330,14 +401,14 @@ async function showCustomer(data) {
   });
 }
 
-// DOMContentLoaded event: Set up event listeners
+// Main function to setup event handlers and initialize page
 document.addEventListener('DOMContentLoaded', () => {
   const searchBtn = document.getElementById('searchBtn');
   const searchMobile = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
   const msgDiv = document.getElementById('messageBar');
 
-  // Trigger search with Enter key
+  // Submit search on Enter key press
   searchMobile.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -366,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Auto search if ?mobileNo= is present in URL
+  // Auto-trigger search if "mobileNo" URL param present
   const params = new URLSearchParams(window.location.search);
   const urlMobile = params.get('mobileNo');
   if (urlMobile) {
