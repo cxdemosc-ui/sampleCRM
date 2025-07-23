@@ -3,7 +3,7 @@ body {
 }
 
 #crm-app {
-  max-width: 800px;
+  max-width: 900px;
   margin: auto;
 }
 
@@ -13,8 +13,9 @@ body {
   border-radius: 50%;
   object-fit: cover;
   background: #fff;
-  border: 2px solid #dfdfdf;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 2px solid #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  margin-right: 15px;
 }
 
 .card {
@@ -29,6 +30,13 @@ body {
   margin-right: 8px;
 }
 
-input[readonly] {
-  background-color: #efefef !important;
+input[readonly], .readonly-field {
+  background-color: #e9ecef !important;
+  border: 1px solid #ced4da;
+  padding: 7px 10px;
+  border-radius: 4px;
+}
+
+.cursor-pointer {
+  cursor: pointer;
 }
