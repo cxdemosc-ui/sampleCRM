@@ -1,14 +1,19 @@
+/* Base page styles */
 body {
   background: #f9fafb;
   font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
 }
 
+/* Main container style */
 #crm-app {
   max-width: 900px;
   margin: auto;
-  padding: 0 10px;
+  padding: 0 15px;
 }
 
+/* Circular round logo */
 .crm-icon {
   width: 60px;
   height: 60px;
@@ -16,10 +21,11 @@ body {
   object-fit: cover;
   background: #fff;
   border: 2px solid #e0e0e0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   margin-right: 15px;
 }
 
+/* Read-only input or display fields */
 .readonly-field {
   background-color: #e9ecef !important;
   border: 1px solid #ced4da;
@@ -27,14 +33,27 @@ body {
   border-radius: 4px;
 }
 
+/* Button group spacing */
 .btn-action-group > button {
   margin-right: 8px;
 }
 
+/* Responsive button stacking on small devices */
 @media (max-width: 767px) {
   .btn-action-group > button {
     display: block;
     width: 100%;
     margin-bottom: 8px;
   }
+}
+
+/* Message bar styling and margin */
+#messageBar {
+  font-weight: 500;
+}
+
+/* Current date text styling */
+#currentDate {
+  font-size: 0.9em;
+  color: #6c757d;
 }
