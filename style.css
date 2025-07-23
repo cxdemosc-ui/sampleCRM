@@ -7,6 +7,16 @@ body {
   margin: auto;
 }
 
+.crm-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff;
+  border: 2px solid #dfdfdf;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
 .card {
   margin-bottom: 12px;
   border: 1px solid #dbeafe;
