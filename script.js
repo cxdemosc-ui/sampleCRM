@@ -1,15 +1,37 @@
-// Replace these with your actual Supabase project details
+// Your Supabase project info
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
-const SUPABASE_RPC_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/get_customer_full_view`;
-const SUPABASE_UPDATE_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/update_customer_data_by_mobile_or_account`;
-const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A';
+const RPC_BASE_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/`;
+const API_KEY = 'eyJhbGciOiJIUzI1NiIsIn...'; // truncated for brevity
 const AUTH_TOKEN = API_KEY;
 
+// Endpoints
+const ENDPOINTS = {
+  getCustomer: RPC_BASE_URL + 'get_customer_full_view',
+  updateCustomer: RPC_BASE_URL + 'update_customer_data_by_mobile_or_account',
+  createServiceRequest: RPC_BASE_URL + 'create_service_request', // You need to implement this in your backend
+  updateServiceRequest: RPC_BASE_URL + 'update_service_request_status', // Implement in backend
+  // For card actions and disputes, implement backend RPCs similarly
+};
+
+// Utility to mask card number
+function maskCard(num) {
+  if (!num || num.length < 4) return '';
+  return '**** **** **** ' + num.slice(-4);
+}
+
+function showMessage(text, type = 'info') {
+  const msgDiv = document.getElementById('messageBar');
+  msgDiv.textContent = text;
+  msgDiv.className = `alert alert-${type}`;
+  msgDiv.style.display = 'block';
+}
+
+// Fetch customer full view
 async function fetchCustomer(identifier) {
   const body = /^\d{8}$/.test(identifier)
     ? { p_mobile_no: null, p_account_number: identifier }
     : { p_mobile_no: identifier, p_account_number: null };
-  const res = await fetch(SUPABASE_RPC_URL, {
+  const res = await fetch(ENDPOINTS.getCustomer, {
     method: 'POST',
     headers: {
       apikey: API_KEY,
@@ -22,6 +44,7 @@ async function fetchCustomer(identifier) {
   return await res.json();
 }
 
+// Update customer info
 async function updateCustomer(form, mobileNo, accountNo) {
   const updateFields = {
     p_mobile_no: mobileNo,
@@ -31,7 +54,7 @@ async function updateCustomer(form, mobileNo, accountNo) {
     p_mobile_no2: form.mobile_no2.value,
     p_email: form.email.value
   };
-  const res = await fetch(SUPABASE_UPDATE_URL, {
+  const res = await fetch(ENDPOINTS.updateCustomer, {
     method: 'POST',
     headers: {
       apikey: API_KEY,
@@ -44,33 +67,80 @@ async function updateCustomer(form, mobileNo, accountNo) {
   return await res.json();
 }
 
-function maskCard(num) {
-  if (!num || num.length < 4) return '';
-  return '**** **** **** ' + num.slice(-4);
+// Utility: Create service request - placeholder; implement backend RPC
+async function createServiceRequest(customerId, description) {
+  showMessage('Creating service request (placeholder)', 'info');
+  // TODO: Implement backend call here
+  return true; // simulate success
 }
 
-document.addEventListener('DOMContentLoaded', function () {
+// Utility: Update service request status - placeholder
+async function updateServiceRequestStatus(requestId, status) {
+  showMessage('Updating service request status (placeholder)', 'info');
+  // TODO: Implement backend call here
+  return true;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
   const searchBtn = document.getElementById('searchBtn');
   const searchMobile = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
   const msgDiv = document.getElementById('messageBar');
 
-  async function showCustomer(customerData) {
-    if (!customerData || customerData.error) {
+  async function showCustomer(data) {
+    if (!data || data.error) {
       detailsDiv.style.display = 'none';
-      msgDiv.textContent = customerData && customerData.error ? customerData.error : 'No customer found';
-      msgDiv.className = 'alert alert-danger';
-      msgDiv.style.display = 'block';
+      showMessage(data?.error ?? 'No customer found', 'danger');
       return;
     }
-
     msgDiv.style.display = 'none';
     detailsDiv.style.display = 'block';
 
-    const info = customerData.customer_info || {};
+    const info = data.customer_info || {};
+
+    // Balance & Account Number from bank_accounts (multiple accounts possible)
+    const accounts = data.accounts || data.bank_accounts || [];
+    let balanceDisplay = 'N/A';
+    let accountNumbersDisplay = 'N/A';
+
+    if (accounts.length > 0) {
+      balanceDisplay = accounts.map(acc => `${acc.account_number} (Balance: ${acc.balance ?? 0})`).join(', ');
+      accountNumbersDisplay = accounts.map(acc => acc.account_number).join(', ');
+    } else if (data.account_number && data.balance !== undefined) {
+      // fallback single account
+      balanceDisplay = data.balance;
+      accountNumbersDisplay = data.account_number;
+    }
+
+    // Transaction Histories (for customer overall)
+    // Fallback if transactions not present in top-level, try debit/credit cards transactions
+    const recentTransactions = data.recent_transactions || [];
+
+    // Debit and credit card transactions (assumed included or implement fetching separately)
+    // For demo, fallback to empty arrays if not available
+    const debitCards = data.debit_cards || [];
+    const creditCards = data.credit_cards || [];
+
+    // Service requests list
+    const serviceRequests = data.service_requests || [];
+
     detailsDiv.innerHTML = `
       <form id="updateForm" class="mb-4">
         <h3>${info.first_name || ''} ${info.last_name || ''}</h3>
+        <div class="form-row mb-2">
+          <div class="col">
+            <label>DOB</label>
+            <div class="readonly-field">${info.dob || 'N/A'}</div>
+          </div>
+          <div class="col">
+            <label>Account Number(s)</label>
+            <div class="readonly-field">${accountNumbersDisplay}</div>
+          </div>
+          <div class="col">
+            <label>Balance</label>
+            <div class="readonly-field">${balanceDisplay}</div>
+          </div>
+        </div>
         <div class="form-group">
           <label>Email</label>
           <input name="email" type="email" class="form-control" value="${info.email || ''}" />
@@ -90,64 +160,163 @@ document.addEventListener('DOMContentLoaded', function () {
         <button type="submit" class="btn btn-primary">Update Customer Info</button>
       </form>
 
-      <hr />
+      <h4>Recent Transactions</h4>
+      <table class="table table-sm table-bordered">
+        <thead>
+          <tr>
+            <th>Date</th><th>Type</th><th>Amount</th><th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${recentTransactions.length > 0 ? recentTransactions.map(tx =>
+            `<tr>
+              <td>${new Date(tx.transaction_date).toLocaleDateString()}</td>
+              <td>${tx.transaction_type || ''}</td>
+              <td>${tx.amount ?? ''}</td>
+              <td>${tx.description || ''}</td>
+            </tr>`).join('') : `<tr><td colspan="4">No transactions available</td></tr>`
+          }
+        </tbody>
+      </table>
 
       <h4>Debit Cards</h4>
-      ${(customerData.debit_cards || []).map(dc => `
+      ${(debitCards.length > 0) ? debitCards.map(dc => `
         <div class="card p-3 mb-2">
           <p><strong>Card Number:</strong> ${maskCard(dc.card_number)}</p>
           <p><strong>Status:</strong> ${dc.status || ''}</p>
-          <div class="btn-group btn-action-group" role="group">
+          <h6>Transactions (if available)</h6>
+          ${(dc.transactions && dc.transactions.length > 0) ? `
+            <ul class="small">
+              ${dc.transactions.map(t => `<li>${new Date(t.transaction_date).toLocaleDateString()}: ${t.description} - ${t.amount}</li>`).join('')}
+            </ul>` : '<small>No transactions available</small>'}
+          <div class="btn-group mt-2">
             <button class="btn btn-warning btn-block-card" data-type="debit" data-no="${dc.card_number}">Block</button>
             <button class="btn btn-info btn-reissue-card" data-type="debit" data-no="${dc.card_number}">Reissue</button>
             <button class="btn btn-danger btn-mark-lost" data-type="debit" data-no="${dc.card_number}">Mark Lost</button>
-            <button class="btn btn-secondary btn-dispute" data-type="debit" data-no="${dc.card_number}">Raise Dispute</button>
+            <button class="btn btn-secondary btn-dispute" data-type="debit" data-no="${dc.card_number}">Dispute</button>
           </div>
         </div>
-      `).join('')}
+      `).join('') : '<p>No debit cards found</p>'}
 
       <h4>Credit Cards</h4>
-      ${(customerData.credit_cards || []).map(cc => `
+      ${(creditCards.length > 0) ? creditCards.map(cc => `
         <div class="card p-3 mb-2">
           <p><strong>Card Number:</strong> ${maskCard(cc.card_number)}</p>
           <p><strong>Status:</strong> ${cc.status || ''}</p>
-          <div class="btn-group btn-action-group" role="group">
+          <h6>Transactions (if available)</h6>
+          ${(cc.transactions && cc.transactions.length > 0) ? `
+            <ul class="small">
+              ${cc.transactions.map(t => `<li>${new Date(t.transaction_date).toLocaleDateString()}: ${t.description} - ${t.amount}</li>`).join('')}
+            </ul>` : '<small>No transactions available</small>'}
+          <div class="btn-group mt-2">
             <button class="btn btn-warning btn-block-card" data-type="credit" data-no="${cc.card_number}">Block</button>
             <button class="btn btn-info btn-reissue-card" data-type="credit" data-no="${cc.card_number}">Reissue</button>
             <button class="btn btn-danger btn-mark-lost" data-type="credit" data-no="${cc.card_number}">Mark Lost</button>
-            <button class="btn btn-secondary btn-dispute" data-type="credit" data-no="${cc.card_number}">Raise Dispute</button>
+            <button class="btn btn-secondary btn-dispute" data-type="credit" data-no="${cc.card_number}">Dispute</button>
           </div>
         </div>
-      `).join('')}
+      `).join('') : '<p>No credit cards found</p>'}
 
       <h4>Service Requests</h4>
-      <ul>
-      ${(customerData.service_requests || []).map(sr =>
-      `<li><b>${sr.request_type}</b> - ${sr.status} (${sr.raised_date || ''})</li>`
-    ).join('')}
-      </ul>
+      <button id="newServiceRequestBtn" class="btn btn-success mb-2">Create New Service Request</button>
+      <table class="table table-sm table-bordered">
+        <thead>
+          <tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          ${serviceRequests.length > 0 ? serviceRequests.map(sr => `
+            <tr>
+              <td>${sr.request_id}</td>
+              <td>${sr.request_type || ''}</td>
+              <td>${sr.status || ''}</td>
+              <td>${new Date(sr.raised_date).toLocaleDateString()}</td>
+              <td>
+                <button class="btn btn-sm btn-primary btn-update-sr" data-id="${sr.request_id}">Update</button>
+                <button class="btn btn-sm btn-danger btn-close-sr" data-id="${sr.request_id}">Close</button>
+              </td>
+            </tr>`).join('') : `<tr><td colspan="5">No service requests found</td></tr>`}
+        </tbody>
+      </table>
+
+      <div id="newSRForm" style="display:none;">
+        <h5>Create New Service Request</h5>
+        <form id="createSRForm">
+          <div class="form-group">
+            <label for="srType">Request Type</label>
+            <input id="srType" name="request_type" class="form-control" required />
+          </div>
+          <div class="form-group">
+            <label for="srDesc">Description</label>
+            <textarea id="srDesc" name="description" class="form-control" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-success">Submit</button>
+          <button type="button" id="cancelSRBtn" class="btn btn-secondary ml-2">Cancel</button>
+        </form>
+      </div>
 
       <div class="alert alert-info mt-3">
-        [Notification placeholder: All changes will trigger notifications to the customer]
+        [Placeholder for notifications to customers on changes.]
       </div>
     `;
 
-    // Form submit handling
+    // Form submit handling for customer update
     const updateForm = detailsDiv.querySelector('#updateForm');
-    updateForm.onsubmit = async function (e) {
+    updateForm.onsubmit = async e => {
       e.preventDefault();
-      msgDiv.textContent = 'Updating...';
-      msgDiv.className = 'alert alert-info';
-      msgDiv.style.display = 'block';
+      showMessage('Updating customer info...', 'info');
       try {
         await updateCustomer(updateForm, info.mobile_no, info.account_number);
-        msgDiv.textContent = 'Details updated, service request created, notification sent (placeholder).';
-        msgDiv.className = 'alert alert-success';
+        showMessage('Customer info updated; service request created; notification sent (placeholder).', 'success');
       } catch {
-        msgDiv.textContent = 'Update failed.';
-        msgDiv.className = 'alert alert-danger';
+        showMessage('Failed to update customer info.', 'danger');
       }
     };
+
+    // Service request create button listener
+    const newSRBtn = detailsDiv.querySelector('#newServiceRequestBtn');
+    const newSRFormContainer = detailsDiv.querySelector('#newSRForm');
+    const createSRForm = detailsDiv.querySelector('#createSRForm');
+    const cancelSRBtn = detailsDiv.querySelector('#cancelSRBtn');
+
+    newSRBtn.onclick = () => {
+      newSRFormContainer.style.display = 'block';
+      newSRBtn.style.display = 'none';
+    };
+    cancelSRBtn.onclick = () => {
+      newSRFormContainer.style.display = 'none';
+      newSRBtn.style.display = 'inline-block';
+      createSRForm.reset();
+    };
+    createSRForm.onsubmit = async e => {
+      e.preventDefault();
+      const formData = new FormData(createSRForm);
+      const requestType = formData.get('request_type');
+      const description = formData.get('description');
+      showMessage('Creating service request...', 'info');
+      try {
+        // TODO: Call backend RPC to create the service request
+        await createServiceRequest(info.customer_id, `Type: ${requestType}; Desc: ${description}`);
+        showMessage('Service request created and notification sent (placeholder).', 'success');
+        createSRForm.reset();
+        newSRFormContainer.style.display = 'none';
+        newSRBtn.style.display = 'inline-block';
+        // Optionally refresh service requests list here
+      } catch {
+        showMessage('Failed to create service request.', 'danger');
+      }
+    };
+
+    // Buttons for updating and closing service requests (placeholders)
+    detailsDiv.querySelectorAll('.btn-update-sr').forEach(btn => {
+      btn.onclick = () => {
+        alert(`Update action for Service Request #${btn.dataset.id} (implement UI & API)`);
+      };
+    });
+    detailsDiv.querySelectorAll('.btn-close-sr').forEach(btn => {
+      btn.onclick = () => {
+        alert(`Close action for Service Request #${btn.dataset.id} (implement UI & API)`);
+      };
+    });
 
     // Card action buttons
     detailsDiv.querySelectorAll('.btn-block-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute').forEach(button => {
@@ -155,39 +324,38 @@ document.addEventListener('DOMContentLoaded', function () {
         const type = button.getAttribute('data-type');
         const no = button.getAttribute('data-no');
         const action = button.textContent;
-        msgDiv.textContent = `${action} request for ${type} card ending ${no.slice(-4)} submitted. Service request created and notification sent (placeholder).`;
-        msgDiv.className = 'alert alert-success';
-        msgDiv.style.display = 'block';
-
-        // TODO: Integrate backend API to process card actions & raise service requests
+        showMessage(`${action} request for ${type} card ending ${no.slice(-4)} submitted. Service request created and notification sent (placeholder).`, 'success');
+        // TODO: Implement the actual backend integration for these actions
       };
     });
   }
 
-  // Search button event
-  searchBtn.onclick = async function () {
+  // Search button
+  const searchBtn = document.getElementById('searchBtn');
+  const searchMobile = document.getElementById('searchMobile');
+  const detailsDiv = document.getElementById('customer-details');
+  const msgDiv = document.getElementById('messageBar');
+
+  searchBtn.onclick = async () => {
     const identifier = searchMobile.value.trim();
     if (!identifier) {
-      msgDiv.textContent = 'Please enter a mobile number or account number.';
-      msgDiv.className = 'alert alert-warning';
-      msgDiv.style.display = 'block';
+      showMessage('Please enter a mobile number or account number.', 'warning');
       detailsDiv.style.display = 'none';
       return;
     }
-    msgDiv.textContent = 'Loading...';
-    msgDiv.className = 'alert alert-info';
-    msgDiv.style.display = 'block';
+    showMessage('Loading customer info...', 'info');
+    detailsDiv.style.display = 'none';
     try {
       const data = await fetchCustomer(identifier);
       await showCustomer(data);
     } catch (err) {
-      msgDiv.textContent = 'Error fetching customer data.';
-      msgDiv.className = 'alert alert-danger';
       detailsDiv.style.display = 'none';
+      showMessage('Error fetching customer data.', 'danger');
+      console.error(err);
     }
   };
 
-  // Auto search if mobileNo param is in URL
+  // Auto search if "mobileNo" query param exists
   const params = new URLSearchParams(window.location.search);
   const urlMobile = params.get('mobileNo');
   if (urlMobile) {
