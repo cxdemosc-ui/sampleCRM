@@ -8,6 +8,7 @@ body {
   padding: 0 10px;
 }
 
+/* Circular, sharp logo */
 .crm-icon {
   width: 60px;
   height: 60px;
@@ -30,10 +31,7 @@ body {
   margin-right: 8px;
 }
 
-.cursor-pointer {
-  cursor: pointer;
-}
-
+/* Stacked buttons on mobile for easier touch */
 @media (max-width: 767px) {
   .btn-action-group > button {
     display: block;
