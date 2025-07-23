@@ -1,16 +1,15 @@
 // Your Supabase project info
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
 const RPC_BASE_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/`;
-const API_KEY = 'eyJhbGciOiJIUzI1NiIsIn...'; // truncated for brevity
+const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A';
 const AUTH_TOKEN = API_KEY;
 
 // Endpoints
 const ENDPOINTS = {
   getCustomer: RPC_BASE_URL + 'get_customer_full_view',
   updateCustomer: RPC_BASE_URL + 'update_customer_data_by_mobile_or_account',
-  createServiceRequest: RPC_BASE_URL + 'create_service_request', // You need to implement this in your backend
-  updateServiceRequest: RPC_BASE_URL + 'update_service_request_status', // Implement in backend
-  // For card actions and disputes, implement backend RPCs similarly
+  createServiceRequest: RPC_BASE_URL + 'create_service_request', // TODO: Implement on backend
+  updateServiceRequest: RPC_BASE_URL + 'update_service_request_status', // TODO: Implement on backend
 };
 
 // Utility to mask card number
@@ -26,82 +25,70 @@ function showMessage(text, type = 'info') {
   msgDiv.style.display = 'block';
 }
 
-// Fetch customer full view
-searchMobile.addEventListener('keydown', function(event) {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    searchBtn.click();
-  }
-});
-
-// Allow input submit via Enter key
-searchMobile.addEventListener('keydown', function(event) {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    searchBtn.click();
-  }
-});
-
-
-async function fetchCustomer(identifier) {
-  const body = /^\d{8}$/.test(identifier)
-    ? { p_mobile_no: null, p_account_number: identifier }
-    : { p_mobile_no: identifier, p_account_number: null };
-  const res = await fetch(ENDPOINTS.getCustomer, {
-    method: 'POST',
-    headers: {
-      apikey: API_KEY,
-      Authorization: `Bearer ${AUTH_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error('Failed to fetch customer');
-  return await res.json();
-}
-
-// Update customer info
-async function updateCustomer(form, mobileNo, accountNo) {
-  const updateFields = {
-    p_mobile_no: mobileNo,
-    p_account_number: accountNo,
-    p_address: form.address.value,
-    p_city: form.city.value,
-    p_mobile_no2: form.mobile_no2.value,
-    p_email: form.email.value
-  };
-  const res = await fetch(ENDPOINTS.updateCustomer, {
-    method: 'POST',
-    headers: {
-      apikey: API_KEY,
-      Authorization: `Bearer ${AUTH_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(updateFields)
-  });
-  if (!res.ok) throw new Error('Failed to update customer');
-  return await res.json();
-}
-
-// Utility: Create service request - placeholder; implement backend RPC
-async function createServiceRequest(customerId, description) {
-  showMessage('Creating service request (placeholder)', 'info');
-  // TODO: Implement backend call here
-  return true; // simulate success
-}
-
-// Utility: Update service request status - placeholder
-async function updateServiceRequestStatus(requestId, status) {
-  showMessage('Updating service request status (placeholder)', 'info');
-  // TODO: Implement backend call here
-  return true;
-}
-
 document.addEventListener('DOMContentLoaded', () => {
   const searchBtn = document.getElementById('searchBtn');
   const searchMobile = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
   const msgDiv = document.getElementById('messageBar');
+
+  // Submit search on pressing Enter key
+  searchMobile.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      searchBtn.click();
+    }
+  });
+
+  async function fetchCustomer(identifier) {
+    const body = /^\d{8}$/.test(identifier)
+      ? { p_mobile_no: null, p_account_number: identifier }
+      : { p_mobile_no: identifier, p_account_number: null };
+    const res = await fetch(ENDPOINTS.getCustomer, {
+      method: 'POST',
+      headers: {
+        apikey: API_KEY,
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('Failed to fetch customer');
+    return await res.json();
+  }
+
+  async function updateCustomer(form, mobileNo, accountNo) {
+    const updateFields = {
+      p_mobile_no: mobileNo,
+      p_account_number: accountNo,
+      p_address: form.address.value,
+      p_city: form.city.value,
+      p_mobile_no2: form.mobile_no2.value,
+      p_email: form.email.value
+    };
+    const res = await fetch(ENDPOINTS.updateCustomer, {
+      method: 'POST',
+      headers: {
+        apikey: API_KEY,
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updateFields)
+    });
+    if (!res.ok) throw new Error('Failed to update customer');
+    return await res.json();
+  }
+
+  // Placeholder service request create/update functions
+  async function createServiceRequest(customerId, description) {
+    showMessage('Creating service request (placeholder)', 'info');
+    // TODO: Implement backend call
+    return true;
+  }
+  async function updateServiceRequestStatus(requestId, status) {
+    showMessage('Updating service request status (placeholder)', 'info');
+    // TODO: Implement backend call
+    return true;
+  }
 
   async function showCustomer(data) {
     if (!data || data.error) {
@@ -113,8 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
     detailsDiv.style.display = 'block';
 
     const info = data.customer_info || {};
-
-    // Balance & Account Number from bank_accounts (multiple accounts possible)
     const accounts = data.accounts || data.bank_accounts || [];
     let balanceDisplay = 'N/A';
     let accountNumbersDisplay = 'N/A';
@@ -123,21 +108,13 @@ document.addEventListener('DOMContentLoaded', () => {
       balanceDisplay = accounts.map(acc => `${acc.account_number} (Balance: ${acc.balance ?? 0})`).join(', ');
       accountNumbersDisplay = accounts.map(acc => acc.account_number).join(', ');
     } else if (data.account_number && data.balance !== undefined) {
-      // fallback single account
       balanceDisplay = data.balance;
       accountNumbersDisplay = data.account_number;
     }
 
-    // Transaction Histories (for customer overall)
-    // Fallback if transactions not present in top-level, try debit/credit cards transactions
     const recentTransactions = data.recent_transactions || [];
-
-    // Debit and credit card transactions (assumed included or implement fetching separately)
-    // For demo, fallback to empty arrays if not available
     const debitCards = data.debit_cards || [];
     const creditCards = data.credit_cards || [];
-
-    // Service requests list
     const serviceRequests = data.service_requests || [];
 
     detailsDiv.innerHTML = `
@@ -178,20 +155,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       <h4>Recent Transactions</h4>
       <table class="table table-sm table-bordered">
-        <thead>
-          <tr>
-            <th>Date</th><th>Type</th><th>Amount</th><th>Description</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Description</th></tr></thead>
         <tbody>
           ${recentTransactions.length > 0 ? recentTransactions.map(tx =>
-            `<tr>
+      `<tr>
               <td>${new Date(tx.transaction_date).toLocaleDateString()}</td>
               <td>${tx.transaction_type || ''}</td>
               <td>${tx.amount ?? ''}</td>
               <td>${tx.description || ''}</td>
-            </tr>`).join('') : `<tr><td colspan="4">No transactions available</td></tr>`
-          }
+            </tr>`).join('') : `<tr><td colspan="4">No transactions available</td></tr>`}
         </tbody>
       </table>
 
@@ -236,9 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <h4>Service Requests</h4>
       <button id="newServiceRequestBtn" class="btn btn-success mb-2">Create New Service Request</button>
       <table class="table table-sm table-bordered">
-        <thead>
-          <tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th><th>Actions</th></tr>
-        </thead>
+        <thead><tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th><th>Actions</th></tr></thead>
         <tbody>
           ${serviceRequests.length > 0 ? serviceRequests.map(sr => `
             <tr>
@@ -288,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    // Service request create button listener
+    // Service request create handling
     const newSRBtn = detailsDiv.querySelector('#newServiceRequestBtn');
     const newSRFormContainer = detailsDiv.querySelector('#newSRForm');
     const createSRForm = detailsDiv.querySelector('#createSRForm');
@@ -310,48 +280,40 @@ document.addEventListener('DOMContentLoaded', () => {
       const description = formData.get('description');
       showMessage('Creating service request...', 'info');
       try {
-        // TODO: Call backend RPC to create the service request
         await createServiceRequest(info.customer_id, `Type: ${requestType}; Desc: ${description}`);
         showMessage('Service request created and notification sent (placeholder).', 'success');
         createSRForm.reset();
         newSRFormContainer.style.display = 'none';
         newSRBtn.style.display = 'inline-block';
-        // Optionally refresh service requests list here
       } catch {
         showMessage('Failed to create service request.', 'danger');
       }
     };
 
-    // Buttons for updating and closing service requests (placeholders)
+    // Service requests update/close placeholder buttons
     detailsDiv.querySelectorAll('.btn-update-sr').forEach(btn => {
       btn.onclick = () => {
-        alert(`Update action for Service Request #${btn.dataset.id} (implement UI & API)`);
+        alert(`Update service request #${btn.dataset.id} - implement UI & backend logic.`);
       };
     });
     detailsDiv.querySelectorAll('.btn-close-sr').forEach(btn => {
       btn.onclick = () => {
-        alert(`Close action for Service Request #${btn.dataset.id} (implement UI & API)`);
+        alert(`Close service request #${btn.dataset.id} - implement UI & backend logic.`);
       };
     });
 
-    // Card action buttons
+    // Card action buttons placeholder handlers
     detailsDiv.querySelectorAll('.btn-block-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute').forEach(button => {
       button.onclick = function () {
         const type = button.getAttribute('data-type');
         const no = button.getAttribute('data-no');
         const action = button.textContent;
-        showMessage(`${action} request for ${type} card ending ${no.slice(-4)} submitted. Service request created and notification sent (placeholder).`, 'success');
-        // TODO: Implement the actual backend integration for these actions
+        showMessage(`${action} request for ${type} card ending ${no.slice(-4)} submitted. Placeholder: service request & notification.`, 'success');
       };
     });
   }
 
-  // Search button
-  const searchBtn = document.getElementById('searchBtn');
-  const searchMobile = document.getElementById('searchMobile');
-  const detailsDiv = document.getElementById('customer-details');
-  const msgDiv = document.getElementById('messageBar');
-
+  // Search button click
   searchBtn.onclick = async () => {
     const identifier = searchMobile.value.trim();
     if (!identifier) {
@@ -371,11 +333,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Auto search if "mobileNo" query param exists
+  // Enter press triggers search
+  searchMobile.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchBtn.click();
+    }
+  });
+
+  // Auto search if mobileNo param in URL
   const params = new URLSearchParams(window.location.search);
-  const urlMobile = params.get('mobileNo');
-  if (urlMobile) {
-    searchMobile.value = urlMobile;
+  const mobileFromUrl = params.get('mobileNo');
+  if (mobileFromUrl) {
+    searchMobile.value = mobileFromUrl;
     searchBtn.click();
   }
 });
