@@ -5,14 +5,12 @@
   <title>Custom CRM</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Bootstrap for responsive, professional layout -->
+  <!-- Bootstrap CSS for responsiveness -->
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"/>
-  <!-- Custom styles -->
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="container mt-4" id="crm-app">
-    <!-- Header with circular icon and page title -->
     <div class="d-flex align-items-center mb-3">
       <img
         src="https://raw.githubusercontent.com/cxdemosc-ui/sampleCRM/main/CRM_sample_image.png"
@@ -20,9 +18,9 @@
         class="crm-icon"
       />
       <h1>Custom CRM</h1>
+      <div id="currentDate" class="ml-auto text-muted small"></div>
     </div>
 
-    <!-- Search input -->
     <div id="search-section" class="mb-4">
       <label for="searchMobile">Enter Mobile Number or Account Number:</label>
       <input
@@ -34,12 +32,10 @@
       />
       <button id="searchBtn" class="btn btn-primary mt-2">Search</button>
     </div>
-    <!-- Status Message Bar -->
+
     <div id="messageBar" class="alert mt-3" style="display:none;"></div>
-    <!-- Customer Details/Results Render Here -->
     <div id="customer-details" style="display:none;"></div>
   </div>
-  <!-- Main script -->
   <script src="script.js"></script>
 </body>
 </html>
