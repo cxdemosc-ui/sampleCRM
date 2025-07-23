@@ -1,0 +1,24 @@
+body {
+  background: #f9fafb;
+}
+
+#crm-app {
+  max-width: 800px;
+  margin: auto;
+}
+
+.card {
+  margin-bottom: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.btn-action-group > button {
+  margin-right: 8px;
+}
+
+input[readonly] {
+  background-color: #efefef !important;
+}
