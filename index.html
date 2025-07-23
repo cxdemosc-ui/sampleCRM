@@ -1,24 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Custom CRM</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="style.css">
-  <!-- Bootstrap for styled form and buttons -->
-  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+  <link
+    rel="stylesheet"
+    href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+  />
+  <style>
+    .crm-icon {
+      width: 60px;
+      height: 60px;
+      margin-right: 15px;
+    }
+    .btn-action-group > button {
+      margin-right: 8px;
+    }
+    .readonly-field {
+      background-color: #e9ecef;
+      border: 1px solid #ced4da;
+      padding: 5px 10px;
+      border-radius: 4px;
+    }
+    .cursor-pointer {
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
   <div class="container mt-4" id="crm-app">
-    <h1>Custom CRM</h1>
-    <div id="search-section">
+    <div class="d-flex align-items-center mb-3">
+      <img
+        src="https://raw.githubusercontent.com/cxdemosc-ui/sampleCRM/main/CRM_sample_image.png"
+        alt="SampleCRM Logo"
+        class="crm-icon"
+      />
+      <h1>Custom CRM</h1>
+    </div>
+    <div id="search-section" class="mb-4">
       <label for="searchMobile">Enter Mobile Number or Account Number:</label>
-      <input type="text" id="searchMobile" placeholder="Mobile or Account Number" class="form-control" />
+      <input
+        type="text"
+        id="searchMobile"
+        placeholder="Mobile or Account Number"
+        class="form-control"
+      />
       <button id="searchBtn" class="btn btn-primary mt-2">Search</button>
     </div>
-    <hr>
-    <div id="customer-details" style="display:none;"></div>
     <div id="messageBar" class="alert mt-3" style="display:none;"></div>
+    <div id="customer-details" style="display:none;"></div>
   </div>
   <script src="script.js"></script>
 </body>
