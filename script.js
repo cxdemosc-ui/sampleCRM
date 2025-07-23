@@ -27,6 +27,22 @@ function showMessage(text, type = 'info') {
 }
 
 // Fetch customer full view
+searchMobile.addEventListener('keydown', function(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    searchBtn.click();
+  }
+});
+
+// Allow input submit via Enter key
+searchMobile.addEventListener('keydown', function(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    searchBtn.click();
+  }
+});
+
+
 async function fetchCustomer(identifier) {
   const body = /^\d{8}$/.test(identifier)
     ? { p_mobile_no: null, p_account_number: identifier }
