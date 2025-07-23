@@ -8,16 +8,17 @@ const AUTH_TOKEN = API_KEY;
 const ENDPOINTS = {
   getCustomer: RPC_BASE_URL + 'get_customer_full_view',
   updateCustomer: RPC_BASE_URL + 'update_customer_data_by_mobile_or_account',
-  createServiceRequest: RPC_BASE_URL + 'create_service_request', // TODO: Implement on backend
-  updateServiceRequest: RPC_BASE_URL + 'update_service_request_status', // TODO: Implement on backend
+  createServiceRequest: RPC_BASE_URL + 'create_service_request', // TODO: backend RPC
+  updateServiceRequest: RPC_BASE_URL + 'update_service_request_status', // TODO: backend RPC
 };
 
-// Utility to mask card number
+// Mask card number helper
 function maskCard(num) {
   if (!num || num.length < 4) return '';
   return '**** **** **** ' + num.slice(-4);
 }
 
+// Show message in alert
 function showMessage(text, type = 'info') {
   const msgDiv = document.getElementById('messageBar');
   msgDiv.textContent = text;
@@ -31,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const detailsDiv = document.getElementById('customer-details');
   const msgDiv = document.getElementById('messageBar');
 
-  // Submit search on pressing Enter key
+  // Enable "Enter" key to submit search
   searchMobile.addEventListener('keydown', function(event) {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -39,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Fetch customer data
   async function fetchCustomer(identifier) {
     const body = /^\d{8}$/.test(identifier)
       ? { p_mobile_no: null, p_account_number: identifier }
@@ -56,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return await res.json();
   }
 
+  // Update customer contact info
   async function updateCustomer(form, mobileNo, accountNo) {
     const updateFields = {
       p_mobile_no: mobileNo,
@@ -78,15 +81,17 @@ document.addEventListener('DOMContentLoaded', () => {
     return await res.json();
   }
 
-  // Placeholder service request create/update functions
+  // Placeholder for service request creation
   async function createServiceRequest(customerId, description) {
     showMessage('Creating service request (placeholder)', 'info');
-    // TODO: Implement backend call
+    // TODO: Implement backend call here
     return true;
   }
+
+  // Placeholder for service request update/close
   async function updateServiceRequestStatus(requestId, status) {
     showMessage('Updating service request status (placeholder)', 'info');
-    // TODO: Implement backend call
+    // TODO: Implement backend call here
     return true;
   }
 
@@ -154,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </form>
 
       <h4>Recent Transactions</h4>
+      <div class="table-responsive">
       <table class="table table-sm table-bordered">
         <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Description</th></tr></thead>
         <tbody>
@@ -166,6 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </tr>`).join('') : `<tr><td colspan="4">No transactions available</td></tr>`}
         </tbody>
       </table>
+      </div>
 
       <h4>Debit Cards</h4>
       ${(debitCards.length > 0) ? debitCards.map(dc => `
@@ -207,6 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       <h4>Service Requests</h4>
       <button id="newServiceRequestBtn" class="btn btn-success mb-2">Create New Service Request</button>
+      <div class="table-responsive">
       <table class="table table-sm table-bordered">
         <thead><tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th><th>Actions</th></tr></thead>
         <tbody>
@@ -223,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </tr>`).join('') : `<tr><td colspan="5">No service requests found</td></tr>`}
         </tbody>
       </table>
-
+      </div>
       <div id="newSRForm" style="display:none;">
         <h5>Create New Service Request</h5>
         <form id="createSRForm">
@@ -245,7 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
 
-    // Form submit handling for customer update
+    // Form submit handler
     const updateForm = detailsDiv.querySelector('#updateForm');
     updateForm.onsubmit = async e => {
       e.preventDefault();
@@ -258,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    // Service request create handling
+    // New service request form handlers
     const newSRBtn = detailsDiv.querySelector('#newServiceRequestBtn');
     const newSRFormContainer = detailsDiv.querySelector('#newSRForm');
     const createSRForm = detailsDiv.querySelector('#createSRForm');
@@ -290,30 +298,30 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    // Service requests update/close placeholder buttons
+    // Placeholders for update and close service requests
     detailsDiv.querySelectorAll('.btn-update-sr').forEach(btn => {
-      btn.onclick = () => {
-        alert(`Update service request #${btn.dataset.id} - implement UI & backend logic.`);
-      };
+      btn.onclick = () => alert(`Update request #${btn.dataset.id} - implement UI & API`);
     });
     detailsDiv.querySelectorAll('.btn-close-sr').forEach(btn => {
-      btn.onclick = () => {
-        alert(`Close service request #${btn.dataset.id} - implement UI & backend logic.`);
-      };
+      btn.onclick = () => alert(`Close request #${btn.dataset.id} - implement UI & API`);
     });
 
-    // Card action buttons placeholder handlers
+    // Card action placeholders
     detailsDiv.querySelectorAll('.btn-block-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute').forEach(button => {
-      button.onclick = function () {
+      button.onclick = () => {
         const type = button.getAttribute('data-type');
         const no = button.getAttribute('data-no');
         const action = button.textContent;
-        showMessage(`${action} request for ${type} card ending ${no.slice(-4)} submitted. Placeholder: service request & notification.`, 'success');
+        showMessage(`${action} request for ${type} card ending ${no.slice(-4)} submitted (placeholder).`, 'success');
       };
     });
   }
 
-  // Search button click
+  const searchBtn = document.getElementById('searchBtn');
+  const searchMobile = document.getElementById('searchMobile');
+  const detailsDiv = document.getElementById('customer-details');
+  const msgDiv = document.getElementById('messageBar');
+
   searchBtn.onclick = async () => {
     const identifier = searchMobile.value.trim();
     if (!identifier) {
@@ -333,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Enter press triggers search
+  // Trigger search on Enter key press
   searchMobile.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -341,11 +349,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Auto search if mobileNo param in URL
+  // Auto-search if mobileNo in URL
   const params = new URLSearchParams(window.location.search);
-  const mobileFromUrl = params.get('mobileNo');
-  if (mobileFromUrl) {
-    searchMobile.value = mobileFromUrl;
+  const urlMobile = params.get('mobileNo');
+  if (urlMobile) {
+    searchMobile.value = urlMobile;
     searchBtn.click();
   }
 });
