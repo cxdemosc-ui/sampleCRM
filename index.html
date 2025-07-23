@@ -4,11 +4,13 @@
   <meta charset="UTF-8" />
   <title>Custom CRM</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
+
+  <!-- Bootstrap CSS -->
   <link
     rel="stylesheet"
     href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
   />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="container mt-4" id="crm-app">
@@ -20,6 +22,7 @@
       />
       <h1>Custom CRM</h1>
     </div>
+
     <div id="search-section" class="mb-4">
       <label for="searchMobile">Enter Mobile Number or Account Number:</label>
       <input
@@ -31,9 +34,12 @@
       />
       <button id="searchBtn" class="btn btn-primary mt-2">Search</button>
     </div>
+
     <div id="messageBar" class="alert mt-3" style="display:none;"></div>
+
     <div id="customer-details" style="display:none;"></div>
   </div>
+
   <script src="script.js"></script>
 </body>
 </html>
