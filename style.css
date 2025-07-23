@@ -5,6 +5,7 @@ body {
 #crm-app {
   max-width: 900px;
   margin: auto;
+  padding: 0 10px;
 }
 
 .crm-icon {
@@ -18,25 +19,25 @@ body {
   margin-right: 15px;
 }
 
-.card {
-  margin-bottom: 12px;
-  border: 1px solid #dbeafe;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-}
-
-.btn-action-group > button {
-  margin-right: 8px;
-}
-
-input[readonly], .readonly-field {
+.readonly-field {
   background-color: #e9ecef !important;
   border: 1px solid #ced4da;
   padding: 7px 10px;
   border-radius: 4px;
 }
 
+.btn-action-group > button {
+  margin-right: 8px;
+}
+
 .cursor-pointer {
   cursor: pointer;
+}
+
+@media (max-width: 767px) {
+  .btn-action-group > button {
+    display: block;
+    width: 100%;
+    margin-bottom: 8px;
+  }
 }
