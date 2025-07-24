@@ -12,9 +12,40 @@ const ENDPOINTS = {
   updateServiceRequest: `${RPC_BASE_URL}update_service_request_status`,
 };
 
-// === Helper functions: (No changes, reuse your existing formatDateDMY, formatTimeHM, maskCard etc.) ===
+// === Helper Functions ===
+function formatDateDMY(dtStr) {
+  if (!dtStr) return 'N/A';
+  const d = new Date(dtStr);
+  if (isNaN(d)) return 'N/A';
+  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+}
 
-// === Main fetchCustomer function ===
+function formatTimeHM(dtStr) {
+  if (!dtStr) return 'N/A';
+  const d = new Date(dtStr);
+  if (isNaN(d)) return 'N/A';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatMoney(amount) {
+  let n = Number(amount);
+  if (isNaN(n)) n = 0;
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function maskCard(num) {
+  if (!num || num.length < 4) return '';
+  return '**** **** **** ' + num.slice(-4);
+}
+
+function showMessage(message, type = 'info') {
+  const msgDiv = document.getElementById('messageBar');
+  msgDiv.innerText = message;
+  msgDiv.className = `alert alert-${type}`;
+  msgDiv.style.display = 'block';
+}
+
+// === API call to fetch customer data ===
 async function fetchCustomer(identifier, searchType = 'auto') {
   const body = {
     p_mobile_no: null,
@@ -44,10 +75,119 @@ async function fetchCustomer(identifier, searchType = 'auto') {
   return await response.json();
 }
 
-// === Complete showCustomer function: Your existing code, unchanged === (same as previous)
+// === Show customer details in the UI ===
+async function showCustomer(data) {
+  const detailsDiv = document.getElementById('customer-details');
+  const msgDiv = document.getElementById('messageBar');
 
-// === Page Initialization & URL Parameter Handling ===
+  if (!data || data.error) {
+    detailsDiv.style.display = 'none';
+    showMessage(data?.error ?? 'No customer found.', 'danger');
+    return;
+  }
+
+  msgDiv.style.display = 'none';
+  detailsDiv.style.display = 'block';
+
+  const info = data || {};
+  const accounts = info.bank_accounts || [];
+  const recentTransactions = info.recent_transactions || [];
+  const debitCards = info.debit_cards || [];
+  const creditCards = info.credit_cards || [];
+  const serviceRequests = info.service_requests || [];
+
+  // ==== Customer Info ====
+  detailsDiv.innerHTML = `
+    <h3>${info.customer_first_name || ''} ${info.customer_last_name || ''}</h3>
+    <div class="form-row mb-3">
+      <div class="col-md-4"><label>Email</label><div class="readonly-field">${info.email || ''}</div></div>
+      <div class="col-md-4"><label>Mobile No 1</label><div class="readonly-field">${info.mobile_no || ''}</div></div>
+      <div class="col-md-4"><label>Mobile No 2</label><div class="readonly-field">${info.mobile_no2 || ''}</div></div>
+    </div>
+    <div class="form-row mb-3">
+      <div class="col-md-6"><label>Address</label><div class="readonly-field">${info.customer_address || ''}</div></div>
+      <div class="col-md-3"><label>City</label><div class="readonly-field">${info.customer_city || ''}</div></div>
+      <div class="col-md-3"><label>Account Number</label><div class="readonly-field">${info.account_number || ''}</div></div>
+    </div>
+
+    <h5>Accounts & Balances</h5>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered">
+        <thead><tr><th>Account Number</th><th>Balance</th></tr></thead>
+        <tbody>
+          ${
+            accounts.length > 0
+              ? accounts.map(acc => `<tr><td>${acc.account_number}</td><td>${formatMoney(acc.balance)}</td></tr>`).join('')
+              : '<tr><td colspan="2">No accounts found</td></tr>'
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Recent Transactions</h4>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered">
+        <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Amount</th><th>Reference Note</th></tr></thead>
+        <tbody>
+          ${
+            recentTransactions.length > 0
+              ? recentTransactions.map(tx => `<tr><td>${formatDateDMY(tx.transaction_date)}</td><td>${formatTimeHM(tx.transaction_date)}</td><td>${tx.transaction_type || ''}</td><td>${tx.amount ?? ''}</td><td>${tx.reference_note || ''}</td></tr>`).join('')
+              : '<tr><td colspan="5">No transactions available</td></tr>'
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Debit Cards</h4>
+    ${
+      debitCards.length > 0
+        ? debitCards.map(dc => `
+          <div class="card p-3 mb-2">
+            <p><strong>Card Number:</strong> ${maskCard(dc.card_number)}</p>
+            <p><strong>Status:</strong> ${dc.status || ''}</p>
+            <h6>Transactions</h6>
+            ${
+              dc.transactions && dc.transactions.length > 0
+                ? `<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Reference Note</th><th>Amount</th></tr></thead><tbody>${
+                    dc.transactions.map(t => `<tr><td>${formatDateDMY(t.transaction_date)}</td><td>${t.reference_note || ''}</td><td>${t.amount}</td></tr>`).join('')
+                  }</tbody></table></div>`
+                : '<small>No transactions available</small>'
+            }
+          </div>`).join('') : '<p>No debit cards found</p>'
+    }
+
+    <h4>Credit Cards</h4>
+    ${
+      creditCards.length > 0
+        ? creditCards.map(cc => `
+          <div class="card p-3 mb-2">
+            <p><strong>Card Number:</strong> ${maskCard(cc.card_number)}</p>
+            <p><strong>Status:</strong> ${cc.status || ''}</p>
+            <h6>Transactions</h6>
+            ${
+              cc.transactions && cc.transactions.length > 0
+                ? `<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Reference Note</th><th>Amount</th></tr></thead><tbody>${
+                    cc.transactions.map(t => `<tr><td>${formatDateDMY(t.transaction_date)}</td><td>${t.reference_note || ''}</td><td>${t.amount}</td></tr>`).join('')
+                  }</tbody></table></div>`
+                : '<small>No transactions available</small>'
+            }
+          </div>`).join('') : '<p>No credit cards found</p>'
+    }
+
+    <h4>Service Requests</h4>
+    ${
+      serviceRequests.length > 0
+        ? `<div class="table-responsive"><table class="table table-sm table-bordered"><thead><tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th></tr></thead><tbody>${
+            serviceRequests.map(sr => `<tr><td>${sr.request_id}</td><td>${sr.request_type || ''}</td><td>${sr.status || ''}</td><td>${formatDateDMY(sr.raised_date)}</td></tr>`).join('')
+          }</tbody></table></div>`
+        : '<p>No service requests found</p>'
+    }
+  `;
+}
+
+// === Initialization & Event Listeners ===
 document.addEventListener('DOMContentLoaded', () => {
+  // Display current date & time
   const currentDateEl = document.getElementById('currentDate');
   const now = new Date();
   currentDateEl.textContent = now.toLocaleString('en-GB', {
@@ -63,6 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchMobile = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
 
+  // Handle Enter key
   searchMobile.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -70,6 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Handle search button click
   searchBtn.onclick = async () => {
     const val = searchMobile.value.trim();
     if (!val) {
@@ -80,7 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
     showMessage('Loading customer info...', 'info');
     detailsDiv.style.display = 'none';
 
-    // Auto-detect type and search
     let type = 'auto';
     if (val.includes('@')) {
       type = 'email';
@@ -100,11 +241,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // URL Parameters for search: check email, accountNumber, mobileNo in priority order
+  // URL params support mobileNo & mobileno, accountNumber, email
   const params = new URLSearchParams(window.location.search);
   const emailParam = params.get('email');
   const accountParam = params.get('accountNumber');
-  const mobileParam = params.get('mobileNo');
+  const mobileParam = params.get('mobileNo') || params.get('mobileno');
 
   if (emailParam) {
     searchMobile.value = emailParam;
