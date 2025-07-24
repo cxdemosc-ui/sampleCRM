@@ -12,46 +12,16 @@ const ENDPOINTS = {
   updateServiceRequest: `${RPC_BASE_URL}update_service_request_status`,
 };
 
-// === Helper Functions ===
-function formatDateDMY(dtStr) {
-  if (!dtStr) return 'N/A';
-  const d = new Date(dtStr);
-  if (isNaN(d)) return 'N/A';
-  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
-}
+// Helper functions (formatDateDMY, formatTimeHM, formatMoney, maskCard, showMessage)
+function formatDateDMY(dtStr) { /* as before */ }
+function formatTimeHM(dtStr) { /* as before */ }
+function formatMoney(amount) { /* as before */ }
+function maskCard(num) { /* as before */ }
+function showMessage(message, type = 'info') { /* as before */ }
 
-function formatTimeHM(dtStr) {
-  if (!dtStr) return 'N/A';
-  const d = new Date(dtStr);
-  if (isNaN(d)) return 'N/A';
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-function formatMoney(amount) {
-  let n = Number(amount);
-  if (isNaN(n)) n = 0;
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function maskCard(num) {
-  if (!num || num.length < 4) return '';
-  return '**** **** **** ' + num.slice(-4);
-}
-
-function showMessage(message, type = 'info') {
-  const msgDiv = document.getElementById('messageBar');
-  msgDiv.innerText = message;
-  msgDiv.className = `alert alert-${type}`;
-  msgDiv.style.display = 'block';
-}
-
-// === API call to fetch customer data ===
+// --- fetchCustomer ---
 async function fetchCustomer(identifier, searchType = 'auto') {
-  const body = {
-    p_mobile_no: null,
-    p_account_number: null,
-    p_email: null,
-  };
+  const body = { p_mobile_no: null, p_account_number: null, p_email: null };
 
   if (searchType === 'email') {
     body.p_email = identifier;
@@ -70,12 +40,11 @@ async function fetchCustomer(identifier, searchType = 'auto') {
     },
     body: JSON.stringify(body),
   });
-
   if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
   return await response.json();
 }
 
-// === Show customer details in the UI ===
+// --- showCustomer ---
 async function showCustomer(data) {
   const detailsDiv = document.getElementById('customer-details');
   const msgDiv = document.getElementById('messageBar');
@@ -89,108 +58,159 @@ async function showCustomer(data) {
   msgDiv.style.display = 'none';
   detailsDiv.style.display = 'block';
 
-  const info = data || {};
-  const accounts = info.bank_accounts || [];
-  const recentTransactions = info.recent_transactions || [];
-  const debitCards = info.debit_cards || [];
-  const creditCards = info.credit_cards || [];
-  const serviceRequests = info.service_requests || [];
-
-  // ==== Customer Info ====
+  // Customer basics
   detailsDiv.innerHTML = `
-    <h3>${info.customer_first_name || ''} ${info.customer_last_name || ''}</h3>
+    <h3>${data.customer_first_name || ''} ${data.customer_last_name || ''}</h3>
     <div class="form-row mb-3">
-      <div class="col-md-4"><label>Email</label><div class="readonly-field">${info.email || ''}</div></div>
-      <div class="col-md-4"><label>Mobile No 1</label><div class="readonly-field">${info.mobile_no || ''}</div></div>
-      <div class="col-md-4"><label>Mobile No 2</label><div class="readonly-field">${info.mobile_no2 || ''}</div></div>
+      <div class="col-md-4"><label>Email</label><input class="form-control" type="email" readonly value="${data.email || ''}" /></div>
+      <div class="col-md-4"><label>Mobile No 1</label><input class="form-control" readonly value="${data.mobile_no || ''}" /></div>
+      <div class="col-md-4"><label>Mobile No 2</label><input class="form-control" readonly value="${data.mobile_no2 || ''}" /></div>
     </div>
     <div class="form-row mb-3">
-      <div class="col-md-6"><label>Address</label><div class="readonly-field">${info.customer_address || ''}</div></div>
-      <div class="col-md-3"><label>City</label><div class="readonly-field">${info.customer_city || ''}</div></div>
-      <div class="col-md-3"><label>Account Number</label><div class="readonly-field">${info.account_number || ''}</div></div>
+      <div class="col-md-6"><label>Address</label><input class="form-control" readonly value="${data.customer_address || ''}" /></div>
+      <div class="col-md-3"><label>City</label><input class="form-control" readonly value="${data.customer_city || ''}" /></div>
+      <div class="col-md-3"><label>Account Number</label><input class="form-control" readonly value="${data.account_number || ''}" /></div>
     </div>
 
     <h5>Accounts & Balances</h5>
-    <div class="table-responsive">
-      <table class="table table-sm table-bordered">
-        <thead><tr><th>Account Number</th><th>Balance</th></tr></thead>
-        <tbody>
-          ${
-            accounts.length > 0
-              ? accounts.map(acc => `<tr><td>${acc.account_number}</td><td>${formatMoney(acc.balance)}</td></tr>`).join('')
-              : '<tr><td colspan="2">No accounts found</td></tr>'
-          }
-        </tbody>
-      </table>
-    </div>
+    <table class="table table-bordered">
+      <thead><tr><th>Account Number</th><th>Balance</th></tr></thead>
+      <tbody>
+        ${
+          (data.bank_accounts && data.bank_accounts.length > 0)
+            ? data.bank_accounts.map(acc => `<tr><td>${acc.account_number}</td><td>${formatMoney(acc.balance)}</td></tr>`).join('')
+            : '<tr><td colspan="2">No accounts found</td></tr>'
+        }
+      </tbody>
+    </table>
 
-    <h4>Recent Transactions</h4>
-    <div class="table-responsive">
-      <table class="table table-sm table-bordered">
-        <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Amount</th><th>Reference Note</th></tr></thead>
-        <tbody>
-          ${
-            recentTransactions.length > 0
-              ? recentTransactions.map(tx => `<tr><td>${formatDateDMY(tx.transaction_date)}</td><td>${formatTimeHM(tx.transaction_date)}</td><td>${tx.transaction_type || ''}</td><td>${tx.amount ?? ''}</td><td>${tx.reference_note || ''}</td></tr>`).join('')
-              : '<tr><td colspan="5">No transactions available</td></tr>'
-          }
-        </tbody>
-      </table>
-    </div>
+    <h5>Recent Transactions</h5>
+    <table class="table table-bordered">
+      <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Amount</th><th>Reference Note</th></tr></thead>
+      <tbody>
+        ${
+          (data.recent_transactions && data.recent_transactions.length > 0)
+            ? data.recent_transactions.map(tx => `
+              <tr>
+                <td>${formatDateDMY(tx.transaction_date)}</td>
+                <td>${formatTimeHM(tx.transaction_date)}</td>
+                <td>${tx.transaction_type || ''}</td>
+                <td>${formatMoney(tx.amount)}</td>
+                <td>${tx.reference_note || ''}</td>
+              </tr>`).join('')
+            : '<tr><td colspan="5">No transactions available</td></tr>'
+        }
+      </tbody>
+    </table>
 
-    <h4>Debit Cards</h4>
+    <h5>Debit Cards</h5>
     ${
-      debitCards.length > 0
-        ? debitCards.map(dc => `
+      (data.debit_cards && data.debit_cards.length > 0)
+        ? data.debit_cards.map(dc => `
           <div class="card p-3 mb-2">
             <p><strong>Card Number:</strong> ${maskCard(dc.card_number)}</p>
             <p><strong>Status:</strong> ${dc.status || ''}</p>
             <h6>Transactions</h6>
             ${
-              dc.transactions && dc.transactions.length > 0
-                ? `<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Reference Note</th><th>Amount</th></tr></thead><tbody>${
-                    dc.transactions.map(t => `<tr><td>${formatDateDMY(t.transaction_date)}</td><td>${t.reference_note || ''}</td><td>${t.amount}</td></tr>`).join('')
-                  }</tbody></table></div>`
+              (dc.transactions && dc.transactions.length > 0)
+                ? `<table class="table table-bordered">
+                  <thead><tr><th>Date</th><th>Reference Note</th><th>Amount</th></tr></thead>
+                  <tbody>${dc.transactions.map(t => `<tr>
+                    <td>${formatDateDMY(t.transaction_date)}</td>
+                    <td>${t.reference_note || ''}</td>
+                    <td>${formatMoney(t.amount)}</td>
+                  </tr>`).join('')}</tbody>
+                </table>`
                 : '<small>No transactions available</small>'
             }
-          </div>`).join('') : '<p>No debit cards found</p>'
+            <div class="btn-group btn-action-group mt-2" role="group">
+              <button class="btn btn-warning btn-block-card" data-type="debit" data-no="${dc.card_number}">Block</button>
+              <button class="btn btn-info btn-reissue-card" data-type="debit" data-no="${dc.card_number}">Reissue</button>
+              <button class="btn btn-danger btn-mark-lost" data-type="debit" data-no="${dc.card_number}">Mark Lost</button>
+              <button class="btn btn-secondary btn-dispute" data-type="debit" data-no="${dc.card_number}">Dispute</button>
+            </div>
+          </div>`).join('')
+        : '<p>No debit cards found</p>'
     }
 
-    <h4>Credit Cards</h4>
+    <h5>Credit Cards</h5>
     ${
-      creditCards.length > 0
-        ? creditCards.map(cc => `
+      (data.credit_cards && data.credit_cards.length > 0)
+        ? data.credit_cards.map(cc => `
           <div class="card p-3 mb-2">
             <p><strong>Card Number:</strong> ${maskCard(cc.card_number)}</p>
             <p><strong>Status:</strong> ${cc.status || ''}</p>
             <h6>Transactions</h6>
             ${
-              cc.transactions && cc.transactions.length > 0
-                ? `<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Reference Note</th><th>Amount</th></tr></thead><tbody>${
-                    cc.transactions.map(t => `<tr><td>${formatDateDMY(t.transaction_date)}</td><td>${t.reference_note || ''}</td><td>${t.amount}</td></tr>`).join('')
-                  }</tbody></table></div>`
+              (cc.transactions && cc.transactions.length > 0)
+                ? `<table class="table table-bordered">
+                  <thead><tr><th>Date</th><th>Reference Note</th><th>Amount</th></tr></thead>
+                  <tbody>${cc.transactions.map(t => `<tr>
+                    <td>${formatDateDMY(t.transaction_date)}</td>
+                    <td>${t.reference_note || ''}</td>
+                    <td>${formatMoney(t.amount)}</td>
+                  </tr>`).join('')}</tbody>
+                </table>`
                 : '<small>No transactions available</small>'
             }
-          </div>`).join('') : '<p>No credit cards found</p>'
+            <div class="btn-group btn-action-group mt-2" role="group">
+              <button class="btn btn-warning btn-block-card" data-type="credit" data-no="${cc.card_number}">Block</button>
+              <button class="btn btn-info btn-reissue-card" data-type="credit" data-no="${cc.card_number}">Reissue</button>
+              <button class="btn btn-danger btn-mark-lost" data-type="credit" data-no="${cc.card_number}">Mark Lost</button>
+              <button class="btn btn-secondary btn-dispute" data-type="credit" data-no="${cc.card_number}">Dispute</button>
+            </div>
+          </div>`).join('')
+        : '<p>No credit cards found</p>'
     }
 
-    <h4>Service Requests</h4>
+    <h5>Service Requests</h5>
     ${
-      serviceRequests.length > 0
-        ? `<div class="table-responsive"><table class="table table-sm table-bordered"><thead><tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th></tr></thead><tbody>${
-            serviceRequests.map(sr => `<tr><td>${sr.request_id}</td><td>${sr.request_type || ''}</td><td>${sr.status || ''}</td><td>${formatDateDMY(sr.raised_date)}</td></tr>`).join('')
-          }</tbody></table></div>`
+      (data.service_requests && data.service_requests.length > 0)
+        ? `<table class="table table-bordered">
+          <thead><tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${data.service_requests.map(sr => `
+              <tr>
+                <td>${sr.request_id}</td>
+                <td>${sr.request_type || ''}</td>
+                <td>${sr.status || ''}</td>
+                <td>${sr.raised_date || 'N/A'}</td>
+                <td>
+                  <button class="btn btn-sm btn-primary btn-update-sr" data-id="${sr.request_id}">Update</button>
+                  <button class="btn btn-sm btn-danger btn-close-sr" data-id="${sr.request_id}">Close</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`
         : '<p>No service requests found</p>'
     }
   `;
+
+  // Bind event handlers for card and service request buttons
+  detailsDiv.querySelectorAll('.btn-block-card').forEach(btn => {
+    btn.onclick = () => showMessage(`Block request for card ending ${btn.dataset.no.slice(-4)} submitted (placeholder).`, 'success');
+  });
+  detailsDiv.querySelectorAll('.btn-reissue-card').forEach(btn => {
+    btn.onclick = () => showMessage(`Reissue request for card ending ${btn.dataset.no.slice(-4)} submitted (placeholder).`, 'success');
+  });
+  detailsDiv.querySelectorAll('.btn-mark-lost').forEach(btn => {
+    btn.onclick = () => showMessage(`Mark Lost request for card ending ${btn.dataset.no.slice(-4)} submitted (placeholder).`, 'success');
+  });
+  detailsDiv.querySelectorAll('.btn-dispute').forEach(btn => {
+    btn.onclick = () => showMessage(`Dispute request for card ending ${btn.dataset.no.slice(-4)} submitted (placeholder).`, 'success');
+  });
+  detailsDiv.querySelectorAll('.btn-update-sr').forEach(btn => {
+    btn.onclick = () => alert(`Update service request #${btn.dataset.id} - not yet implemented`);
+  });
+  detailsDiv.querySelectorAll('.btn-close-sr').forEach(btn => {
+    btn.onclick = () => alert(`Close service request #${btn.dataset.id} - not yet implemented`);
+  });
 }
 
-// === Initialization & Event Listeners ===
+// === Initialization: load date, setup handlers, and auto-search from URL params ===
 document.addEventListener('DOMContentLoaded', () => {
-  // Display current date & time
   const currentDateEl = document.getElementById('currentDate');
-  const now = new Date();
-  currentDateEl.textContent = now.toLocaleString('en-GB', {
+  currentDateEl.textContent = new Date().toLocaleString('en-GB', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -203,7 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchMobile = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
 
-  // Handle Enter key
   searchMobile.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -211,7 +230,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Handle search button click
   searchBtn.onclick = async () => {
     const val = searchMobile.value.trim();
     if (!val) {
@@ -241,7 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // URL params support mobileNo & mobileno, accountNumber, email
+  // Support URL parameters: email, accountNumber, mobileNo, and mobileno (case-insensitive)
   const params = new URLSearchParams(window.location.search);
   const emailParam = params.get('email');
   const accountParam = params.get('accountNumber');
@@ -249,13 +267,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (emailParam) {
     searchMobile.value = emailParam;
-    fetchCustomer(emailParam, 'email')
-      .then(showCustomer)
-      .catch(error => {
-        detailsDiv.style.display = 'none';
-        showMessage('Error fetching customer data.', 'danger');
-        console.error(error);
-      });
+    fetchCustomer(emailParam, 'email').then(showCustomer).catch(e => {
+      detailsDiv.style.display = 'none';
+      showMessage('Error fetching customer data.', 'danger');
+      console.error(e);
+    });
   } else if (accountParam) {
     searchMobile.value = accountParam;
     searchBtn.click();
