@@ -12,7 +12,7 @@ const ENDPOINTS = {
   updateServiceRequest: `${RPC_BASE_URL}update_service_request_status`,
 };
 
-// Helpers
+// --- Helper Functions ---
 function formatDateDMY(dtStr) {
   if (!dtStr) return 'N/A';
   const d = new Date(dtStr);
@@ -41,7 +41,7 @@ function showMessage(message, type = 'info') {
   msgDiv.style.display = 'block';
 }
 
-// API Fetch
+// --- API Call ---
 async function fetchCustomer(identifier, searchType = 'auto') {
   const body = { p_mobile_no: null, p_account_number: null, p_email: null };
   if (searchType === 'email') body.p_email = identifier;
@@ -52,21 +52,21 @@ async function fetchCustomer(identifier, searchType = 'auto') {
     method: 'POST',
     headers: { apikey: API_KEY, Authorization: `Bearer ${AUTH_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    cache: 'no-store', // prevent caching of API call to always get fresh data
   });
   if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
   return await response.json();
 }
 
-// UI rendering
+// --- Rendering ---
 async function showCustomer(data) {
   const detailsDiv = document.getElementById('customer-details');
-  const msgDiv = document.getElementById('messageBar');
   if (!data || data.error) {
     detailsDiv.style.display = 'none';
     showMessage(data?.error ?? 'No customer found.', 'danger');
     return;
   }
-  msgDiv.style.display = 'none';
+  document.getElementById('messageBar').style.display = 'none';
   detailsDiv.style.display = 'block';
 
   detailsDiv.innerHTML = `
@@ -83,28 +83,40 @@ async function showCustomer(data) {
     </div>
 
     <h5>Accounts & Balances</h5>
-    <table class="table table-bordered"><thead><tr><th>Account Number</th><th>Balance</th></tr></thead><tbody>
-      ${(data.bank_accounts && data.bank_accounts.length > 0)
-        ? data.bank_accounts.map(acc => `<tr><td>${acc.account_number}</td><td>${formatMoney(acc.balance)}</td></tr>`).join('')
-        : '<tr><td colspan="2">No accounts found</td></tr>'}
-    </tbody></table>
+    <table class="table table-bordered">
+      <thead><tr><th>Account Number</th><th>Balance</th></tr></thead>
+      <tbody>
+        ${
+          data.bank_accounts && data.bank_accounts.length > 0
+            ? data.bank_accounts.map(acc => `<tr><td>${acc.account_number}</td><td>${formatMoney(acc.balance)}</td></tr>`).join('')
+            : '<tr><td colspan="2">No accounts found</td></tr>'
+        }
+      </tbody>
+    </table>
 
     <h5>Recent Transactions</h5>
-    <table class="table table-bordered"><thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Amount</th><th>Reference Note</th></tr></thead><tbody>
-      ${(data.recent_transactions && data.recent_transactions.length > 0)
-        ? data.recent_transactions.map(tx => `<tr>
-          <td>${formatDateDMY(tx.transaction_date)}</td>
-          <td>${formatTimeHM(tx.transaction_date)}</td>
-          <td>${tx.transaction_type || ''}</td>
-          <td>${formatMoney(tx.amount)}</td>
-          <td>${tx.reference_note || ''}</td>
-        </tr>`).join('')
-        : '<tr><td colspan="5">No transactions available</td></tr>'}
-    </tbody></table>
+    <table class="table table-bordered">
+      <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Amount</th><th>Reference Note</th></tr></thead>
+      <tbody>
+        ${
+          data.recent_transactions && data.recent_transactions.length > 0
+            ? data.recent_transactions.map(tx => `
+            <tr>
+              <td>${formatDateDMY(tx.transaction_date)}</td>
+              <td>${formatTimeHM(tx.transaction_date)}</td>
+              <td>${tx.transaction_type || ''}</td>
+              <td>${formatMoney(tx.amount)}</td>
+              <td>${tx.reference_note || ''}</td>
+            </tr>`).join('')
+            : '<tr><td colspan="5">No transactions available</td></tr>'
+        }
+      </tbody>
+    </table>
 
     <h5>Debit Cards</h5>
-    ${data.debit_cards && data.debit_cards.length > 0
-      ? data.debit_cards.map(dc => `
+    ${
+      data.debit_cards && data.debit_cards.length > 0
+        ? data.debit_cards.map(dc => `
         <div class="card p-3 mb-2">
           <p><strong>Card Number:</strong> ${maskCard(dc.card_number)}</p>
           <p><strong>Status:</strong> ${dc.status || ''}</p>
@@ -114,30 +126,33 @@ async function showCustomer(data) {
             <button class="btn btn-danger btn-mark-lost" data-type="debit" data-no="${dc.card_number}">Mark Lost</button>
             <button class="btn btn-secondary btn-dispute" data-type="debit" data-no="${dc.card_number}">Dispute</button>
           </div>
-        </div>
-      `).join('')
-      : '<p>No debit cards found</p>'}
+        </div>`).join('')
+        : '<p>No debit cards found</p>'
+    }
 
     <h5>Credit Cards</h5>
-    ${data.credit_cards && data.credit_cards.length > 0
-      ? data.credit_cards.map(cc => `
+    ${
+      data.credit_cards && data.credit_cards.length > 0
+        ? data.credit_cards.map(cc => `
         <div class="card p-3 mb-2">
           <p><strong>Card Number:</strong> ${maskCard(cc.card_number)}</p>
           <p><strong>Status:</strong> ${cc.status || ''}</p>
           <h6>Transactions</h6>
-          ${(cc.transactions && cc.transactions.length > 0)
-            ? `<table class="table table-bordered">
-              <thead><tr><th>Date</th><th>Amount</th><th>Description or Merchant</th><th>Status</th></tr></thead>
-              <tbody>
-                ${cc.transactions.map(t => `<tr>
+          ${
+            cc.transactions && cc.transactions.length > 0
+              ? `<table class="table table-bordered">
+                <thead><tr><th>Date</th><th>Amount</th><th>Description or Merchant</th><th>Status</th></tr></thead>
+                <tbody>
+                ${cc.transactions.map(t => `
+                  <tr>
                     <td>${formatDateDMY(t.transaction_date)}</td>
                     <td>${formatMoney(t.amount)}</td>
                     <td>${t.description || t.merchant_info || ''}</td>
                     <td>${t.status || ''}</td>
                   </tr>`).join('')}
-              </tbody>
-            </table>`
-            : '<small>No transactions available</small>'
+                </tbody>
+              </table>`
+              : '<small>No transactions available</small>'
           }
           <div class="btn-group btn-action-group mt-2" role="group">
             <button class="btn btn-warning btn-block-card" data-type="credit" data-no="${cc.card_number}">Block</button>
@@ -145,31 +160,52 @@ async function showCustomer(data) {
             <button class="btn btn-danger btn-mark-lost" data-type="credit" data-no="${cc.card_number}">Mark Lost</button>
             <button class="btn btn-secondary btn-dispute" data-type="credit" data-no="${cc.card_number}">Dispute</button>
           </div>
-        </div>
-      `).join('')
-      : '<p>No credit cards found</p>'}
+        </div>`).join('')
+        : '<p>No credit cards found</p>'
+    }
 
     <h5>Service Requests</h5>
-    ${(data.service_requests && data.service_requests.length > 0)
-        ? `<table class="table table-bordered"><thead><tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th><th>Actions</th></tr></thead><tbody>
+    ${
+      data.service_requests && data.service_requests.length > 0
+        ? `<table class="table table-bordered">
+          <thead><tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th><th>Actions</th></tr></thead>
+          <tbody>
             ${data.service_requests.map(sr => `
-              <tr>
-                <td>${sr.request_id}</td>
-                <td>${sr.request_type || ''}</td>
-                <td>${sr.status || ''}</td>
-                <td>${sr.raised_date || 'N/A'}</td>
-                <td>
-                  <button class="btn btn-sm btn-primary btn-update-sr" data-id="${sr.request_id}">Update</button>
-                  <button class="btn btn-sm btn-danger btn-close-sr" data-id="${sr.request_id}">Close</button>
-                </td>
-              </tr>
-            `).join('')}
-        </tbody></table>`
+            <tr>
+              <td>${sr.request_id}</td>
+              <td>${sr.request_type || ''}</td>
+              <td>${sr.status || ''}</td>
+              <td>${sr.raised_date || 'N/A'}</td>
+              <td>
+                <button class="btn btn-sm btn-primary btn-update-sr" data-id="${sr.request_id}">Update</button>
+                <button class="btn btn-sm btn-danger btn-close-sr" data-id="${sr.request_id}">Close</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`
         : '<p>No service requests found</p>'
     }
+
+    <button id="newServiceRequestBtn" class="btn btn-success mt-3">Create New Service Request</button>
+
+    <div id="newSRForm" class="mt-3" style="display:none;">
+      <h5>Create New Service Request</h5>
+      <form id="createSRForm">
+        <div class="form-group">
+          <label for="srType">Request Type</label>
+          <input type="text" id="srType" name="request_type" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label for="srDesc">Description</label>
+          <textarea id="srDesc" name="description" class="form-control" rows="3" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-success">Submit</button>
+        <button type="button" id="cancelSRBtn" class="btn btn-secondary ml-2">Cancel</button>
+      </form>
+    </div>
   `;
 
-  // Attach event handlers for action buttons just like before
+  // Button event handlers
   detailsDiv.querySelectorAll('.btn-block-card').forEach(btn => {
     btn.onclick = () => showMessage(`Block request for card ending ${btn.dataset.no.slice(-4)} submitted (placeholder).`, 'success');
   });
@@ -188,9 +224,58 @@ async function showCustomer(data) {
   detailsDiv.querySelectorAll('.btn-close-sr').forEach(btn => {
     btn.onclick = () => alert(`Close service request #${btn.dataset.id} - not yet implemented`);
   });
+
+  // New Service Request button and form
+  const newSRBtn = detailsDiv.querySelector('#newServiceRequestBtn');
+  const newSRForm = detailsDiv.querySelector('#newSRForm');
+  const createSRForm = detailsDiv.querySelector('#createSRForm');
+  const cancelSRBtn = detailsDiv.querySelector('#cancelSRBtn');
+
+  newSRBtn.onclick = () => {
+    newSRForm.style.display = 'block';
+    newSRBtn.style.display = 'none';
+  };
+  cancelSRBtn.onclick = () => {
+    newSRForm.style.display = 'none';
+    newSRBtn.style.display = 'inline-block';
+    createSRForm.reset();
+  };
+  createSRForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const requestType = createSRForm.request_type.value.trim();
+    const description = createSRForm.description.value.trim();
+    if (!requestType || !description) {
+      showMessage('Please fill all fields to submit a new service request.', 'warning');
+      return;
+    }
+    showMessage('Creating service request...', 'info');
+
+    try {
+      // Call your createServiceRequest API endpoint here, passing customer ID and request details
+      // Example:
+      // await fetch(ENDPOINTS.createServiceRequest, {...})
+
+      // Simulate success:
+      showMessage('Service request created successfully (placeholder).', 'success');
+      createSRForm.reset();
+      newSRForm.style.display = 'none';
+      newSRBtn.style.display = 'inline-block';
+
+      // Optionally refresh details to show updated requests
+      const val = document.getElementById('searchMobile').value.trim();
+      let type = 'auto';
+      if (val.includes('@')) type = 'email';
+      else if (/^\d{8}$/.test(val)) type = 'account';
+      else type = 'mobile';
+      const data = await fetchCustomer(val, type);
+      await showCustomer(data);
+    } catch (err) {
+      showMessage('Error creating service request.', 'danger');
+    }
+  };
 }
 
-// Initialization, event listeners, and auto-search logic from params
+// --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
   const currentDateEl = document.getElementById('currentDate');
   currentDateEl.textContent = new Date().toLocaleString('en-GB', {
