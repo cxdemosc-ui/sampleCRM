@@ -42,22 +42,42 @@ function showMessage(message, type = 'info') {
   msgDiv.style.display = 'block';
 }
 
+// === Fetch Customer (with debug logging) ===
 async function fetchCustomer(identifier, searchType = 'auto') {
+  console.log("DEBUG: fetchCustomer called with", { identifier, searchType });
   const body = { p_mobile_no: null, p_account_number: null, p_email: null };
   if (searchType === 'email') body.p_email = identifier;
   else if (/^\d{8}$/.test(identifier)) body.p_account_number = identifier;
   else body.p_mobile_no = identifier;
+  console.log("DEBUG: Sending payload to Supabase:", body);
 
-  const response = await fetch(ENDPOINTS.getCustomer, {
-    method: 'POST',
-    headers: { apikey: API_KEY, Authorization: `Bearer ${AUTH_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    cache: 'no-store',
-  });
-  if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
-  return await response.json();
+  try {
+    const response = await fetch(ENDPOINTS.getCustomer, {
+      method: 'POST',
+      headers: { 
+        apikey: API_KEY,
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    });
+    console.log("DEBUG: Supabase HTTP status:", response.status);
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("ERROR: Supabase returned error body:", errText);
+      throw new Error(`API Error: ${response.status} ${errText}`);
+    }
+    const result = await response.json();
+    console.log("DEBUG: Supabase JSON response:", result);
+    return result;
+  } catch (err) {
+    console.error("ERROR in fetchCustomer:", err);
+    throw err;
+  }
 }
 
+// === Helper: Render Cards Conditionally ===
 function renderCardActions(card, type) {
   let actions = '';
   if (card.status !== 'blocked') {
@@ -73,24 +93,25 @@ function renderCardActions(card, type) {
   return actions;
 }
 
+// === Webex POST Helper ===
 async function sendActionToWebexConnect(payload) {
+  console.log("DEBUG: Sending payload to Webex:", payload);
   const resp = await fetch(ENDPOINTS.webexAction, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+  console.log("DEBUG: Webex HTTP status:", resp.status);
   if (!resp.ok) throw new Error(`Webhook error ${resp.status}`);
 
   let result;
-  try {
-    result = await resp.json();
-  } catch {
-    result = await resp.text();
-  }
+  try { result = await resp.json(); }
+  catch { result = await resp.text(); }
+  console.log("DEBUG: Webex Response:", result);
   return result;
 }
 
-// === Rendering Main ===
+// === Main Rendering Function ===
 async function showCustomer(data) {
   const detailsDiv = document.getElementById('customer-details');
   if (!data || data.error) {
@@ -101,10 +122,134 @@ async function showCustomer(data) {
   document.getElementById('messageBar').style.display = 'none';
   detailsDiv.style.display = 'block';
 
-  // Build UI (omitted here for brevity — same as previous final version with dropdown for SR type)
-  // Keeping exactly your previous HTML tables and layout…
+  detailsDiv.innerHTML = `
+    <h3>${data.customer_first_name || ''} ${data.customer_last_name || ''}</h3>
+    <div class="form-row mb-3">
+      <div class="col-md-4"><label>Email</label><div class="readonly-field">${data.email || ''}</div></div>
+      <div class="col-md-4"><label>Mobile No 1</label><div class="readonly-field">${data.mobile_no || ''}</div></div>
+      <div class="col-md-4"><label>Mobile No 2</label><div class="readonly-field">${data.mobile_no2 || ''}</div></div>
+    </div>
+    <div class="form-row mb-3">
+      <div class="col-md-6"><label>Address</label><div class="readonly-field">${data.customer_address || ''}</div></div>
+      <div class="col-md-3"><label>City</label><div class="readonly-field">${data.customer_city || ''}</div></div>
+      <div class="col-md-3"><label>Account Number</label><div class="readonly-field">${data.account_number || ''}</div></div>
+    </div>
 
-  // CARD BUTTON ACTION HANDLERS
+    <h5>Accounts & Balances</h5>
+    <table class="table table-bordered">
+      <thead><tr><th>Account Number</th><th>Balance</th></tr></thead>
+      <tbody>
+        ${data.bank_accounts?.length
+            ? data.bank_accounts.map(acc => `<tr><td>${acc.account_number}</td><td>${formatMoney(acc.balance)}</td></tr>`).join('')
+            : '<tr><td colspan="2">No accounts found</td></tr>'}
+      </tbody>
+    </table>
+
+    <h5>Recent Transactions</h5>
+    <table class="table table-bordered">
+      <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Amount</th><th>Reference Note</th></tr></thead>
+      <tbody>
+        ${data.recent_transactions?.length
+            ? data.recent_transactions.map(tx => `
+              <tr>
+                <td>${formatDateDMY(tx.transaction_date)}</td>
+                <td>${formatTimeHM(tx.transaction_date)}</td>
+                <td>${tx.transaction_type || ''}</td>
+                <td>${formatMoney(tx.amount)}</td>
+                <td>${tx.reference_note || ''}</td>
+              </tr>`).join('')
+            : '<tr><td colspan="5">No transactions available</td></tr>'}
+      </tbody>
+    </table>
+
+    <h5>Debit Cards</h5>
+    ${data.debit_cards?.length
+        ? data.debit_cards.map(dc => `
+          <div class="card p-3 mb-2">
+            <p><strong>Card Number:</strong> ${maskCard(dc.card_number)}</p>
+            <p><strong>Status:</strong> ${dc.status || ''}</p>
+            <div class="btn-group btn-action-group mt-2" role="group">
+              ${renderCardActions(dc, 'debit')}
+            </div>
+          </div>`).join('')
+        : '<p>No debit cards found</p>'}
+
+    <h5>Credit Cards</h5>
+    ${data.credit_cards?.length
+        ? data.credit_cards.map(cc => `
+          <div class="card p-3 mb-2">
+            <p><strong>Card Number:</strong> ${maskCard(cc.card_number)}</p>
+            <p><strong>Status:</strong> ${cc.status || ''}</p>
+            <h6>Transactions</h6>
+            ${cc.transactions?.length
+                ? `<table class="table table-bordered">
+                    <thead><tr><th>Date</th><th>Amount</th><th>Description or Merchant</th><th>Status</th></tr></thead>
+                    <tbody>
+                      ${cc.transactions.map(t => `
+                        <tr>
+                          <td>${formatDateDMY(t.transaction_date)}</td>
+                          <td>${formatMoney(t.amount)}</td>
+                          <td>${t.description || t.merchant_info || ''}</td>
+                          <td>${t.status || ''}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                  </table>`
+                : '<small>No transactions available</small>'}
+            <div class="btn-group btn-action-group mt-2" role="group">
+              ${renderCardActions(cc, 'credit')}
+            </div>
+          </div>`).join('')
+        : '<p>No credit cards found</p>'}
+
+    <h5>Service Requests</h5>
+    ${data.service_requests?.length
+        ? `<table class="table table-bordered">
+            <thead><tr><th>Request No</th><th>Type</th><th>Status</th><th>Raised Date</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${data.service_requests.map(sr => `
+                <tr>
+                  <td>${sr.request_id}</td>
+                  <td>${sr.request_type || ''}</td>
+                  <td>${sr.status || ''}</td>
+                  <td>${sr.raised_date || 'N/A'}</td>
+                  <td>
+                    ${sr.status?.toLowerCase() === 'closed'
+                        ? ''
+                        : `<button class="btn btn-sm btn-demo-outline btn-update-sr" data-id="${sr.request_id}">Update</button>
+                           <button class="btn btn-sm btn-demo-outline btn-close-sr" data-id="${sr.request_id}">Close</button>`}
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`
+        : '<p>No service requests found</p>'}
+
+    <button id="newServiceRequestBtn" class="btn btn-demo mt-3">Create New Service Request</button>
+    <div id="newSRForm" class="mt-3" style="display:none;">
+      <h5>Create New Service Request</h5>
+      <form id="createSRForm">
+        <div class="form-group">
+          <label for="srType">Request Type</label>
+          <select id="srType" name="request_type" class="form-control" required>
+            <option value="">-- Select --</option>
+            <option>Mobile Banking</option>
+            <option>Internet Banking</option>
+            <option>Credit Card</option>
+            <option>Debit Card</option>
+            <option>Savings Account</option>
+            <option>Deposits</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="srDesc">Description</label>
+          <textarea id="srDesc" name="description" class="form-control" rows="3" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-demo">Submit</button>
+        <button type="button" id="cancelSRBtn" class="btn btn-demo-outline ml-2">Cancel</button>
+      </form>
+    </div>
+  `;
+
+  // === CARD ACTION BUTTONS ===
   detailsDiv.querySelectorAll('.btn-block-card,.btn-unblock-card,.btn-reissue-card,.btn-mark-lost,.btn-dispute')
     .forEach(btn => {
       btn.onclick = async () => {
@@ -132,15 +277,15 @@ async function showCustomer(data) {
           if (typeof result === 'object' ? result.status === 'OK' : ('' + result).includes('OK')) {
             showMessage(`${actionType} request sent successfully for card ending ${btn.dataset.no.slice(-4)}.`, 'success');
           } else {
-            showMessage(`Request sent but not confirmed by Webex. Response: ${JSON.stringify(result)}`, 'warning');
+            showMessage(`Request sent but not confirmed by Webex.`, 'warning');
           }
-        } catch (err) {
+        } catch {
           showMessage(`Failed to send ${actionType} request.`, 'danger');
         }
       };
     });
 
-  // SERVICE REQUEST FORM
+  // === SERVICE REQUEST FORM ===
   const newSRBtn = detailsDiv.querySelector('#newServiceRequestBtn');
   const newSRForm = detailsDiv.querySelector('#newSRForm');
   const createSRForm = detailsDiv.querySelector('#createSRForm');
@@ -182,15 +327,15 @@ async function showCustomer(data) {
         const updatedData = await fetchCustomer(val, type);
         await showCustomer(updatedData);
       } else {
-        showMessage(`Service request sent but not confirmed by Webex. Response: ${JSON.stringify(result)}`, 'warning');
+        showMessage(`Service request sent but not confirmed by Webex.`, 'warning');
       }
-    } catch (err) {
+    } catch {
       showMessage('Error creating service request.', 'danger');
     }
   };
 }
 
-// === Init ===
+// === INIT ===
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('currentDate').textContent = new Date().toLocaleString('en-GB', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -202,7 +347,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const detailsDiv = document.getElementById('customer-details');
 
   searchMobile.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); searchBtn.click(); } });
-
   searchBtn.onclick = async () => {
     const val = searchMobile.value.trim();
     if (!val) {
