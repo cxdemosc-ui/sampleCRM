@@ -33,9 +33,30 @@ body {
   border-radius: 4px;
 }
 
+/* Neutral DEMO button styles */
+.btn-demo {
+  background-color: #e0e4ea !important;
+  border-color: #cfd2d8 !important;
+  color: #52596b !important;
+}
+.btn-demo:hover {
+  background-color: #d4d8de !important;
+  color: #3c404b !important;
+}
+.btn-demo-outline {
+  background: none !important;
+  border: 1px solid #cfd2d8 !important;
+  color: #52596b !important;
+}
+.btn-demo-outline:hover {
+  background: #f0f1f3 !important;
+  color: #3c404b !important;
+}
+
 /* Button group spacing */
 .btn-action-group > button {
   margin-right: 8px;
+  margin-bottom: 4px;
 }
 
 /* Responsive button stacking on small devices */
