@@ -34,11 +34,11 @@ function cardStatusBadge(status) {
   const lc = String(status).toLowerCase();
   if (lc === 'active') return `<span class="badge badge-status active">Active</span>`;
   if (lc === 'blocked') return `<span class="badge badge-status blocked">Blocked</span>`;
-  if (lc === 'reissued' || lc === 're-isssued' || lc === 're-issue') return `<span class="badge badge-status reissued">Re-Issued</span>`;
+  if (lc.includes('re-issue') || lc.includes('reissued')) return `<span class="badge badge-status reissued">Re-Issued</span>`;
   return `<span class="badge badge-status">${status}</span>`;
 }
 
-// === API ===
+// === API Calls ===
 async function fetchCustomer(identifier, searchType = 'auto') {
   const body = { p_mobile_no: null, p_account_number: null, p_email: null };
   if (searchType === 'email') body.p_email = identifier;
@@ -57,6 +57,7 @@ async function fetchCustomer(identifier, searchType = 'auto') {
   if (!response.ok) throw new Error(`API Error: ${response.status}`);
   return response.json();
 }
+
 async function sendActionToWebexConnect(payload) {
   const resp = await fetch(ENDPOINTS.webexAction, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -65,11 +66,12 @@ async function sendActionToWebexConnect(payload) {
   return resp.json().catch(() => ({}));
 }
 
-// === Actions Render ===
+// === Render Card Actions ===
 function renderCardActions(card, type) {
   const status = card.status.toLowerCase();
   const disabled = status === 'reissue' ? 'disabled' : '';
   let actions = '';
+
   if (status !== 'blocked' && !disabled) {
     actions += `<button class="btn btn-sm btn-block-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}">Block</button> `;
   } else if (status === 'blocked') {
@@ -81,8 +83,9 @@ function renderCardActions(card, type) {
   return actions;
 }
 
-// === Bind actions + SR modal logic ===
+// === Bind Actions + Modal ===
 function bindActionHandlers(data) {
+  // Card action buttons
   document.querySelectorAll('.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
     .forEach(btn => {
       btn.onclick = async () => {
@@ -92,13 +95,16 @@ function bindActionHandlers(data) {
         const isBlock = btn.classList.contains('btn-block-card');
         const isUnblock = btn.classList.contains('btn-unblock-card');
         const isReissue = btn.classList.contains('btn-reissue-card');
+
         if (isBlock || isUnblock || isReissue) {
           const actionLabel = isBlock ? 'Block' : isUnblock ? 'UnBlock' : 'Reissue';
           if (!confirm(`${actionLabel} this ${typeLabel} card?\nCard Number: ${cardNo}\nStatus: ${status}`)) return;
         }
+
         const actionType = isBlock ? 'Block' : isUnblock ? 'UnBlock' :
                            isReissue ? 'Reissue' :
                            btn.classList.contains('btn-mark-lost') ? 'Lost' : 'Dispute';
+
         const payload = {
           custPhone: data.mobile_no,
           custPhone2: data.mobile_no2,
@@ -110,30 +116,41 @@ function bindActionHandlers(data) {
           serviceRequestType: "",
           serviceDescription: ""
         };
+
         showMessage(`${actionType} request in progress...`, 'info');
         const result = await sendActionToWebexConnect(payload);
         if (result.status === 'OK') {
-          if (isBlock) { btn.textContent = 'UnBlock'; btn.classList.replace('btn-block-card','btn-unblock-card'); btn.classList.replace('btn-danger','btn-success'); }
-          else if (isUnblock) { btn.textContent = 'Block'; btn.classList.replace('btn-unblock-card','btn-block-card'); btn.classList.replace('btn-success','btn-danger'); }
-          else if (isReissue) { btn.closest('.card-section').querySelectorAll('button').forEach(b => b.disabled = true); }
-          showMessage(`${actionType} request sent successfully for card ending ${cardNo.slice(-4)}.`,'success');
-        } else showMessage(`Request sent but not confirmed.`, 'warning');
+          if (isBlock) {
+            btn.textContent = 'UnBlock';
+            btn.classList.replace('btn-block-card','btn-unblock-card');
+          } else if (isUnblock) {
+            btn.textContent = 'Block';
+            btn.classList.replace('btn-unblock-card','btn-block-card');
+          } else if (isReissue) {
+            btn.closest('.card-section').querySelectorAll('button').forEach(b => b.disabled = true);
+          }
+          showMessage(`${actionType} request sent successfully for card ending ${cardNo.slice(-4)}.`, 'success');
+        } else {
+          showMessage(`Request sent but not confirmed.`, 'warning');
+        }
       };
     });
 
-  // New SR Modal binding:
+  // Create New SR modal logic
   $("#newSRModal").on('show.bs.modal', function() {
     $("#newSRAlert").hide().removeClass("alert-success alert-danger").text('');
-    $("#srType").val(''); $("#srDesc").val('');
+    $("#srType").val('');
+    $("#srDesc").val('');
   });
-  $("#newSRForm").off("submit").on("submit", async function(e){
+
+  $("#newSRForm").off("submit").on("submit", async function(e) {
     e.preventDefault();
-    const srType = $("#srType").val();
-    const srDesc = $("#srDesc").val();
-    if(!srType || !srDesc) {
-      $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required."); return;
+    const srType = $("#srType").val().trim();
+    const srDesc = $("#srDesc").val().trim();
+    if (!srType || !srDesc) {
+      $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required.");
+      return;
     }
-    // Compose payload for request creation
     const payload = {
       custPhone: data.mobile_no,
       custPhone2: data.mobile_no2,
@@ -147,10 +164,9 @@ function bindActionHandlers(data) {
     };
     $("#newSRAlert").show().removeClass('alert-danger').addClass('alert-info').text("Creating Service Request...");
     const result = await sendActionToWebexConnect(payload);
-    if(result.status === 'OK' || result.id) {
+    if (result.status === 'OK' || result.id) {
       $("#newSRAlert").removeClass('alert-info').addClass('alert-success').text("Service Request created!");
-      setTimeout(()=>{$("#newSRModal").modal('hide');},1500);
-      // Optionally re-fetch customer to refresh table
+      setTimeout(()=>{$("#newSRModal").modal('hide');}, 1500);
     } else {
       $("#newSRAlert").removeClass('alert-info').addClass('alert-danger').text("Failed to create service request.");
     }
@@ -159,7 +175,7 @@ function bindActionHandlers(data) {
 
 // === Main Render ===
 async function showCustomer(data) {
-  latestCustomer = data; // For modal SR creation
+  latestCustomer = data;
   const detailsDiv = document.getElementById('customer-details');
   if (!data || data.error) {
     detailsDiv.style.display = 'none';
@@ -169,6 +185,7 @@ async function showCustomer(data) {
   detailsDiv.style.display = 'block';
   document.getElementById('messageBar').style.display = 'none';
 
+  // Profile
   let html = `
     <div class="card p-3 mb-3 bg-light border-primary">
       <div class="row">
@@ -188,104 +205,120 @@ async function showCustomer(data) {
     </div>
   `;
 
+  // Debit card and account transactions
   html += `<h6 class="text-primary">Debit Card</h6>`;
-  html += (data.debit_cards || []).map(c =>
-    `<div class="border rounded p-2 mb-2 bg-white card-section">
-      ${maskCard(c.card_number)}
-      ${cardStatusBadge(c.status)}
+  html += (data.debit_cards || []).map(c => `
+    <div class="border rounded p-2 mb-2 bg-white card-section">
+      ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
       ${(data.recent_transactions || []).length
         ? `<table class="table table-sm table-bordered">
-            <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-            <tbody>
-              ${data.recent_transactions.map(tx => `
-                <tr>
-                  <td>${formatDateDMY(tx.transaction_date)}</td>
-                  <td>${tx.transaction_type}</td>
-                  <td>${formatMoney(tx.amount)}</td>
-                  <td>${tx.reference_note || ''}</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>`
+             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+             <tbody>${data.recent_transactions.map(tx => `
+               <tr>
+                 <td>${formatDateDMY(tx.transaction_date)}</td>
+                 <td>${tx.transaction_type}</td>
+                 <td>${formatMoney(tx.amount)}</td>
+                 <td>${tx.reference_note || ''}</td>
+               </tr>`).join('')}
+             </tbody>
+           </table>`
         : '<p>No account/debit card transactions found.</p>'}
       <div class="card-actions">${renderCardActions(c,"Debit")}</div>
-    </div>`).join('');
+    </div>
+  `).join('');
 
+  // Credit cards
   html += `<h6 class="text-primary">Credit Card</h6>`;
-  html += (data.credit_cards || []).map(c =>
-    `<div class="border rounded p-2 mb-2 bg-white card-section">
-      ${maskCard(c.card_number)}
-      ${cardStatusBadge(c.status)}
+  html += (data.credit_cards || []).map(c => `
+    <div class="border rounded p-2 mb-2 bg-white card-section">
+      ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
       ${(c.transactions && c.transactions.length)
         ? `<table class="table table-sm table-bordered">
-            <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-            <tbody>
-              ${c.transactions.map(tx => `
-                <tr>
-                  <td>${formatDateDMY(tx.transaction_date)}</td>
-                  <td>${tx.transaction_type}</td>
-                  <td>${formatMoney(tx.amount)}</td>
-                  <td>${tx.reference_note || ''}</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>`
+             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+             <tbody>${c.transactions.map(tx => `
+               <tr>
+                 <td>${formatDateDMY(tx.transaction_date)}</td>
+                 <td>${tx.transaction_type}</td>
+                 <td>${formatMoney(tx.amount)}</td>
+                 <td>${tx.reference_note || ''}</td>
+               </tr>`).join('')}
+             </tbody>
+           </table>`
         : '<p>No credit card transactions found.</p>'}
       <div class="card-actions">${renderCardActions(c,"Credit")}</div>
-    </div>`).join('');
+    </div>
+  `).join('');
 
+  // Service requests
   html += `<h6 class="text-primary">Service Requests</h6>`;
   html += (data.service_requests || []).length
     ? `<table class="table table-sm table-bordered">
-        <thead><tr>
-          <th>ID</th><th>Type</th><th>Status</th>
-          <th>Raised</th><th>Resolution</th>
-          <th>Description</th><th>Actions</th></tr></thead>
-        <tbody>
-          ${data.service_requests.map(sr => `
-            <tr>
-              <td>${sr.request_id}</td>
-              <td>${sr.request_type}</td>
-              <td>${sr.status}</td>
-              <td>${sr.raised_date}</td>
-              <td>${sr.resolution_date || '-'}</td>
-              <td class="sr-desc" title="${sr.description || ''}">${sr.description || ''}</td>
-              <td>
-                ${sr.status === 'Open'
-                  ? `<button class="btn btn-sm btn-info btn-update-sr" data-srid="${sr.request_id}">Update</button>
-                     <button class="btn btn-sm btn-danger btn-close-sr" data-srid="${sr.request_id}">Close</button>`
-                  : ''}
-              </td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-      <div class="mt-2 text-right"><button id="newSRBtn" type="button" class="btn btn-primary btn-demo" data-toggle="modal" data-target="#newSRModal">Create New Service Request</button></div>`
+         <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Raised</th><th>Resolution</th><th>Description</th><th>Actions</th></tr></thead>
+         <tbody>${data.service_requests.map(sr => `
+           <tr>
+             <td>${sr.request_id}</td>
+             <td>${sr.request_type}</td>
+             <td>${sr.status}</td>
+             <td>${sr.raised_date}</td>
+             <td>${sr.resolution_date || '-'}</td>
+             <td class="sr-desc" title="${sr.description || ''}">${sr.description || ''}</td>
+             <td>
+               ${sr.status === 'Open'
+                 ? `<button class="btn btn-sm btn-update-sr" data-srid="${sr.request_id}">Update</button>
+                    <button class="btn btn-sm btn-close-sr" data-srid="${sr.request_id}">Close</button>`
+                 : ''}
+             </td>
+           </tr>`).join('')}
+         </tbody>
+       </table>
+       <div class="mt-2 text-right">
+         <button id="newSRBtn" type="button" class="btn btn-primary btn-demo" data-toggle="modal" data-target="#newSRModal">Create New Service Request</button>
+       </div>`
     : `<p>No service requests found.</p>
-      <div class="mt-2 text-right"><button id="newSRBtn" type="button" class="btn btn-primary btn-demo" data-toggle="modal" data-target="#newSRModal">Create New Service Request</button></div>`;
+       <div class="mt-2 text-right">
+         <button id="newSRBtn" type="button" class="btn btn-primary btn-demo" data-toggle="modal" data-target="#newSRModal">Create New Service Request</button>
+       </div>`;
 
   detailsDiv.innerHTML = html;
   bindActionHandlers(data);
 }
 
+// === Init ===
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('currentDate').textContent =
-    new Date().toLocaleString('en-GB', {weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    new Date().toLocaleString('en-GB', { weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' });
+
   const searchBtn = document.getElementById('searchBtn');
   const searchMobile = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
 
-  searchMobile.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); searchBtn.click(); } });
+  searchMobile.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); searchBtn.click(); }
+  });
+
   searchBtn.onclick = async () => {
     const val = searchMobile.value.trim();
-    if (!val) { showMessage('Please enter a mobile, account, or email.','warning'); detailsDiv.style.display = 'none'; return; }
-    showMessage('Loading customer info...','info'); detailsDiv.style.display = 'none';
+    if (!val) {
+      showMessage('Please enter a mobile, account, or email.', 'warning');
+      detailsDiv.style.display = 'none';
+      return;
+    }
+    showMessage('Loading customer info...', 'info');
+    detailsDiv.style.display = 'none';
     let type = val.includes('@') ? 'email' : /^\d{8}$/.test(val) ? 'account' : 'mobile';
-    try { const data = await fetchCustomer(val, type); await showCustomer(data); }
-    catch { detailsDiv.style.display = 'none'; showMessage('Error fetching data.','danger'); }
+    try {
+      const data = await fetchCustomer(val, type);
+      await showCustomer(data);
+    } catch (err) {
+      detailsDiv.style.display = 'none';
+      showMessage('Error fetching data.', 'danger');
+    }
   };
 
-  // Modal SR button (delegated) -- open modal only if customer loaded
-  $(document).on('click', '#newSRBtn', function(e){
-    if(!latestCustomer) {
-      showMessage('Load a customer first.','danger');
+  // Delegate click for Create SR button
+  $(document).on('click', '#newSRBtn', function () {
+    if (!latestCustomer) {
+      showMessage('Load a customer first.', 'danger');
       return false;
     }
     $("#newSRModal").modal("show");
