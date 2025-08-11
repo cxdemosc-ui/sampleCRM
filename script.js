@@ -2,7 +2,7 @@
 // Base URLs and API keys for calling Supabase RPC endpoints and Webex Connect webhook
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
 const RPC_BASE_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/`;
-const API_KEY = 'YOUR_ANON_KEY';       // Replace if regenerating API key
+const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A';       // Replace if regenerating API key
 const AUTH_TOKEN = API_KEY;            // Using anon key for auth (demo-safe)
 
 // All endpoints your CRM portal will call
