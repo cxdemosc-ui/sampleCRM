@@ -1,8 +1,6 @@
-// === Supabase & Webhook Config ===
+// === Config ===
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
 const RPC_BASE_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/`;
-
-// Your actual anon key from Supabase
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A';
 const AUTH_TOKEN = API_KEY;
 
@@ -31,7 +29,7 @@ function formatDateDMY(dtStr) {
   return isNaN(d) ? 'N/A' : `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
 }
 
-// === API Calls ===
+// === API ===
 async function fetchCustomer(identifier, searchType = 'auto') {
   const body = { p_mobile_no: null, p_account_number: null, p_email: null };
   if (searchType === 'email') body.p_email = identifier;
@@ -50,17 +48,15 @@ async function fetchCustomer(identifier, searchType = 'auto') {
   if (!response.ok) throw new Error(`API Error: ${response.status}`);
   return response.json();
 }
-
 async function sendActionToWebexConnect(payload) {
   const resp = await fetch(ENDPOINTS.webexAction, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
   return resp.json().catch(() => ({}));
 }
 
-// === Render Card Actions ===
+// === Actions Render ===
 function renderCardActions(card, type) {
   const status = card.status.toLowerCase();
   const disabled = status === 'reissue' ? 'disabled' : '';
@@ -74,12 +70,12 @@ function renderCardActions(card, type) {
   actions += `<button class="btn btn-sm btn-warning btn-reissue-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Reissue</button> `;
   actions += `<button class="btn btn-sm btn-secondary btn-mark-lost" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Mark Lost</button> `;
   actions += `<button class="btn btn-sm btn-info btn-dispute" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Dispute</button>`;
-  return `<div class="card-actions mt-1">${actions}</div>`;
+  return actions;
 }
 
-// === Bind Card/SR Action Events ===
+// === Bind Actions ===
 function bindActionHandlers(data) {
-  document.querySelectorAll('.btn-block-card,.btn-unblock-card,.btn-reissue-card,.btn-mark-lost,.btn-dispute')
+  document.querySelectorAll('.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
     .forEach(btn => {
       btn.onclick = async () => {
         const cardNo = btn.dataset.no;
@@ -99,12 +95,12 @@ function bindActionHandlers(data) {
                            btn.classList.contains('btn-mark-lost') ? 'Lost' : 'Dispute';
 
         const payload = {
-          custPhone: data.mobile_no || '',
-          custPhone2: data.mobile_no2 || '',
-          custAccount: data.account_number || '',
-          custCard: cardNo || '',
+          custPhone: data.mobile_no,
+          custPhone2: data.mobile_no2,
+          custAccount: data.account_number,
+          custCard: cardNo,
           cardType: typeLabel,
-          custEmail: data.email || '',
+          custEmail: data.email,
           custAction: actionType,
           serviceRequestType: "",
           serviceDescription: ""
@@ -113,115 +109,113 @@ function bindActionHandlers(data) {
         showMessage(`${actionType} request in progress...`, 'info');
         const result = await sendActionToWebexConnect(payload);
         if (result.status === 'OK') {
-          if (isBlock) {
-            btn.textContent = 'UnBlock';
-            btn.classList.replace('btn-block-card', 'btn-unblock-card');
-            btn.classList.replace('btn-danger', 'btn-success');
-          } else if (isUnblock) {
-            btn.textContent = 'Block';
-            btn.classList.replace('btn-unblock-card', 'btn-block-card');
-            btn.classList.replace('btn-success', 'btn-danger');
-          } else if (isReissue) {
-            btn.closest('.card-actions').querySelectorAll('button').forEach(b => b.disabled = true);
-          }
+          if (isBlock) { btn.textContent = 'UnBlock'; btn.classList.replace('btn-block-card','btn-unblock-card'); btn.classList.replace('btn-danger','btn-success'); }
+          else if (isUnblock) { btn.textContent = 'Block'; btn.classList.replace('btn-unblock-card','btn-block-card'); btn.classList.replace('btn-success','btn-danger'); }
+          else if (isReissue) { btn.closest('.card-section').querySelectorAll('button').forEach(b => b.disabled = true); }
           showMessage(`${actionType} request sent successfully for card ending ${cardNo.slice(-4)}.`, 'success');
-        } else {
-          showMessage(`Request sent but not confirmed.`, 'warning');
-        }
+        } else showMessage(`Request sent but not confirmed.`, 'warning');
       };
     });
 }
 
-// === Main Render matching backend JSON ===
+// === Main Render ===
 async function showCustomer(data) {
   const detailsDiv = document.getElementById('customer-details');
   if (!data || data.error) {
     detailsDiv.style.display = 'none';
-    showMessage(data?.error ?? 'No customer found.', 'danger');
+    showMessage(data?.error ?? 'No customer found.','danger');
     return;
   }
-  detailsDiv.style.display = 'block';
   document.getElementById('messageBar').style.display = 'none';
+  detailsDiv.style.display = 'block';
 
   let html = `
     <div class="card p-3 mb-3 bg-light border-primary">
-      <h5 class="text-primary m-0">${data.customer_first_name} ${data.customer_last_name}</h5>
-      <div><strong>Mobile:</strong> ${data.mobile_no} | <strong>Alt:</strong> ${data.mobile_no2}</div>
-      <div><strong>Email:</strong> ${data.email}</div>
-      <div><strong>Address:</strong> ${data.customer_address || 'N/A'}</div>
-      <div><strong>City:</strong> ${data.customer_city || 'N/A'}</div>
-      <div><strong>Account Number:</strong> ${data.account_number}</div>
-      <div><strong>Account Balance:</strong> $${formatMoney(data.account_balance)}</div>
+      <div class="row">
+        <div class="col-md-6">
+          <h5 class="text-primary">${data.customer_first_name} ${data.customer_last_name}</h5>
+          <div><strong>Mobile:</strong> ${data.mobile_no}</div>
+          <div><strong>Alt Mobile:</strong> ${data.mobile_no2}</div>
+          <div><strong>Email:</strong> ${data.email}</div>
+        </div>
+        <div class="col-md-6">
+          <div><strong>Address:</strong> ${data.customer_address || 'N/A'}</div>
+          <div><strong>City:</strong> ${data.customer_city || 'N/A'}</div>
+          <div><strong>Account Number:</strong> ${data.account_number}</div>
+          <div><strong>Account Balance:</strong> $${formatMoney(data.account_balance)}</div>
+        </div>
+      </div>
     </div>
-
-    <h6 class="text-primary">Account Transactions</h6>
-    ${(data.recent_transactions || []).length
-      ? `<table class="table table-sm table-bordered">
-          <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-          <tbody>
-            ${data.recent_transactions.map(tx => `
-              <tr>
-                <td>${formatDateDMY(tx.transaction_date)}</td>
-                <td>${tx.transaction_type}</td>
-                <td>${formatMoney(tx.amount)}</td>
-                <td>${tx.reference_note || ''}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>`
-      : `<p>No account transactions found.</p>`}
-
-    <h6 class="text-primary">Debit Cards</h6>
-    ${(data.debit_cards || []).map(c => `
-      <div class="border rounded p-2 mb-2 bg-white">
-        ${maskCard(c.card_number)} - ${c.status}
-        ${renderCardActions(c,"Debit")}
-      </div>`).join('')}
-    <p>No debit card transactions found.</p>
-    
-    <h6 class="text-primary">Credit Cards</h6>
-    ${(data.credit_cards || []).map(c => `
-      <div class="border rounded p-2 mb-2 bg-white">
-        ${maskCard(c.card_number)} - ${c.status}
-        ${renderCardActions(c,"Credit")}
-        <h6 class="text-info mt-2">Credit Card Transactions</h6>
-        ${(c.transactions && c.transactions.length)
-          ? `<table class="table table-sm table-bordered">
-              <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-              <tbody>
-                ${c.transactions.map(tx => `
-                  <tr>
-                    <td>${formatDateDMY(tx.transaction_date)}</td>
-                    <td>${tx.transaction_type}</td>
-                    <td>${formatMoney(tx.amount)}</td>
-                    <td>${tx.reference_note || ''}</td>
-                  </tr>`).join('')}
-              </tbody>
-            </table>`
-          : `<p>No credit card transactions found.</p>`}
-      </div>`).join('')}
-
-    <h6 class="text-primary">Service Requests</h6>
-    ${(data.service_requests || []).length
-      ? `<table class="table table-sm table-bordered">
-          <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Raised</th><th>Resolution</th><th>Description</th><th>Actions</th></tr></thead>
-          <tbody>
-            ${data.service_requests.map(sr => `
-              <tr>
-                <td>${sr.request_id}</td>
-                <td>${sr.request_type}</td>
-                <td>${sr.status}</td>
-                <td>${sr.raised_date}</td>
-                <td>${sr.resolution_date || '-'}</td>
-                <td>${sr.description || ''}</td>
-                <td>
-                  <button class="btn btn-sm btn-info btn-update-sr" data-srid="${sr.request_id}">Update</button>
-                  <button class="btn btn-sm btn-danger btn-close-sr" data-srid="${sr.request_id}">Close</button>
-                </td>
-              </tr>`).join('')}
-          </tbody>
-        </table>`
-      : `<p>No service requests found.</p>`}
   `;
+
+  // Debit card (with account/recent transactions)
+  html += `<h6 class="text-primary">Debit Card</h6>`;
+  html += (data.debit_cards || []).map(c =>
+    `<div class="border rounded p-2 mb-2 bg-white card-section">
+      ${maskCard(c.card_number)} - ${c.status}
+      ${(data.recent_transactions || []).length
+        ? `<table class="table table-sm table-bordered mb-2">
+            <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+            <tbody>
+              ${data.recent_transactions.map(tx => `
+                <tr>
+                  <td>${formatDateDMY(tx.transaction_date)}</td>
+                  <td>${tx.transaction_type}</td>
+                  <td>${formatMoney(tx.amount)}</td>
+                  <td>${tx.reference_note || ''}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`
+        : '<p>No account/debit card transactions found.</p>'}
+      <div class="card-actions mt-1">${renderCardActions(c,"Debit")}</div>
+    </div>`).join('');
+
+  // Credit card(s)
+  html += `<h6 class="text-primary">Credit Card</h6>`;
+  html += (data.credit_cards || []).map(c =>
+    `<div class="border rounded p-2 mb-2 bg-white card-section">
+      ${maskCard(c.card_number)} - ${c.status}
+      ${(c.transactions && c.transactions.length)
+        ? `<table class="table table-sm table-bordered mb-2">
+            <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+            <tbody>
+              ${c.transactions.map(tx => `
+                <tr>
+                  <td>${formatDateDMY(tx.transaction_date)}</td>
+                  <td>${tx.transaction_type}</td>
+                  <td>${formatMoney(tx.amount)}</td>
+                  <td>${tx.reference_note || ''}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`
+        : '<p>No credit card transactions found.</p>'}
+      <div class="card-actions mt-1">${renderCardActions(c,"Credit")}</div>
+    </div>`).join('');
+
+  // Service requests
+  html += `<h6 class="text-primary">Service Requests</h6>`;
+  html += (data.service_requests || []).length
+    ? `<table class="table table-sm table-bordered">
+        <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Raised</th><th>Resolution</th><th>Description</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${data.service_requests.map(sr => `
+            <tr>
+              <td>${sr.request_id}</td>
+              <td>${sr.request_type}</td>
+              <td>${sr.status}</td>
+              <td>${sr.raised_date}</td>
+              <td>${sr.resolution_date || '-'}</td>
+              <td>${sr.description || ''}</td>
+              <td>
+                ${sr.status === 'Open'
+                  ? `<button class="btn btn-sm btn-info btn-update-sr" data-srid="${sr.request_id}">Update</button>
+                     <button class="btn btn-sm btn-danger btn-close-sr" data-srid="${sr.request_id}">Close</button>`
+                  : ''}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`
+    : `<p>No service requests found.</p>`;
 
   detailsDiv.innerHTML = html;
   bindActionHandlers(data);
@@ -231,27 +225,17 @@ async function showCustomer(data) {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('currentDate').textContent =
     new Date().toLocaleString('en-GB', {weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
-
   const searchBtn = document.getElementById('searchBtn');
   const searchMobile = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
 
-  searchMobile.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); searchBtn.click(); }
-  });
-
+  searchMobile.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); searchBtn.click(); } });
   searchBtn.onclick = async () => {
     const val = searchMobile.value.trim();
     if (!val) { showMessage('Please enter a mobile, account, or email.','warning'); detailsDiv.style.display = 'none'; return; }
-    showMessage('Loading customer info...','info');
-    detailsDiv.style.display = 'none';
+    showMessage('Loading customer info...','info'); detailsDiv.style.display = 'none';
     let type = val.includes('@') ? 'email' : /^\d{8}$/.test(val) ? 'account' : 'mobile';
-    try {
-      const data = await fetchCustomer(val, type);
-      await showCustomer(data);
-    } catch {
-      detailsDiv.style.display = 'none';
-      showMessage('Error fetching data.','danger');
-    }
+    try { const data = await fetchCustomer(val, type); await showCustomer(data); }
+    catch { detailsDiv.style.display = 'none'; showMessage('Error fetching data.','danger'); }
   };
 });
