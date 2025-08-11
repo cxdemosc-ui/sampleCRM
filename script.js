@@ -19,6 +19,15 @@ function showMessage(message, type = 'info') {
 function maskCard(num) {
   return (!num || num.length < 4) ? '' : '**** **** **** ' + num.slice(-4);
 }
+function formatMoney(amount) {
+  const n = Number(amount);
+  return isNaN(n) ? '0.00' : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function formatDateDMY(dtStr) {
+  if (!dtStr) return 'N/A';
+  const d = new Date(dtStr);
+  return isNaN(d) ? 'N/A' : `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+}
 
 // === API Calls ===
 async function fetchCustomer(identifier, searchType = 'auto') {
@@ -124,7 +133,7 @@ async function showCustomer(data) {
       <p><strong>Mobile:</strong> ${data.mobile_no} | <strong>Alt:</strong> ${data.mobile_no2}</p>
       <p><strong>Email:</strong> ${data.email}</p>
       <p><strong>Account Number:</strong> ${data.account_number || 'N/A'}</p>
-      <p><strong>Account Balance:</strong> $${data.account_balance?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) || '0.00'}</p>
+      <p><strong>Account Balance:</strong> $${formatMoney(data.account_balance)}</p>
     </div>
 
     <h6 class="text-primary">Credit Cards</h6>
@@ -142,6 +151,23 @@ async function showCustomer(data) {
         <button class="btn btn-sm btn-info btn-update-sr" data-srid="${sr.request_id}">Update</button>
         <button class="btn btn-sm btn-danger btn-close-sr" data-srid="${sr.request_id}">Close</button>
       </div>`).join('')}
+
+    <h6 class="text-primary">Recent Transactions</h6>
+    ${(data.recent_transactions || []).length === 0 
+      ? `<p>No recent transactions found.</p>`
+      : `<table class="table table-sm table-bordered">
+          <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+          <tbody>
+            ${data.recent_transactions.map(tx => `
+              <tr>
+                <td>${formatDateDMY(tx.transaction_date)}</td>
+                <td>${tx.transaction_type || 'N/A'}</td>
+                <td>${formatMoney(tx.amount)}</td>
+                <td>${tx.reference_note || ''}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`
+    }
   `;
   bindActionHandlers(data);
 }
