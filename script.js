@@ -27,11 +27,17 @@ function showMessage(msg, type='info') {
 }
 function maskCard(c) { return (!c || c.length < 4) ? '' : '**** **** **** ' + c.slice(-4); }
 function formatMoney(a) { const n = Number(a); return isNaN(n) ? '0.00' : n.toLocaleString(undefined, {minimumFractionDigits:2}); }
+
+// ✅ Revised date formatting function
 function formatDateDMYHM(dt) {
   if (!dt) return '';
-  const d = new Date(dt); if (isNaN(d)) return '';
-  return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  let safe = String(dt).trim().replace(' ', 'T');  // ensure ISO 8601 "YYYY-MM-DDTHH:mm:ss"
+  safe = safe.split('.')[0]; // strip microseconds if present
+  const d = new Date(safe);
+  if (isNaN(d)) return '';
+  return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getFullYear()).slice(-2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
+
 function cardStatusBadge(status) {
   const lc = String(status).toLowerCase();
   if (lc === 'active') return `<span class="badge badge-status active">Active</span>`;
@@ -125,7 +131,6 @@ function bindActionHandlers(data) {
   });
 }
 
-// ---------------- showCustomer() with fixes ----------------
 async function showCustomer(data) {
   latestCustomer = data;
   const div = document.getElementById('customer-details');
@@ -153,7 +158,7 @@ async function showCustomer(data) {
     </div>
   </div>`;
 
-  // Debit Card section fix
+  // Debit Card section
   html += `<h6 class="text-primary">Debit Card</h6>`;
   html += (data.debit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
@@ -190,7 +195,9 @@ async function showCustomer(data) {
     </div>`).join('');
 
   // Savings Account section
-  const savingsTxs = (data.recent_transactions || []).filter(tx => tx.transaction_medium && tx.transaction_medium.toLowerCase() === 'savings');
+  const savingsTxs = (data.recent_transactions || []).filter(
+    tx => tx.transaction_medium && tx.transaction_medium.toLowerCase() === 'savings'
+  );
   html += `<h6 class="text-primary">Savings Account Transactions</h6>`;
   html += savingsTxs.length
     ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
@@ -203,7 +210,7 @@ async function showCustomer(data) {
          </tr>`).join('')}</tbody></table>`
     : `<p>No savings account transactions found.</p>`;
 
-  // Service Requests section restored
+  // Service Requests
   html += `<h6 class="text-primary">Service Requests</h6>`;
   html += (data.service_requests || []).length
     ? `<table class="table table-sm table-bordered">
@@ -231,7 +238,6 @@ async function showCustomer(data) {
   bindActionHandlers(data);
 }
 
-// DOM Ready
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('currentDate').textContent =
     new Date().toLocaleString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
