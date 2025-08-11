@@ -1,6 +1,6 @@
 /* Base page styles */
 body {
-  background: #f9fafb; /* matches original */
+  background: #f9fafb;
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
@@ -68,20 +68,18 @@ body {
   }
 }
 
-/* Message bar styling and margin */
+/* Message bar styling */
 #messageBar {
   font-weight: 500;
 }
 
-/* Current date */
+/* Date styling */
 #currentDate {
   font-size: 0.9em;
   color: #6c757d;
 }
 
-/* ===== Added for latest build ===== */
-
-/* Section heading styling inside customer details */
+/* Section headings in customer details */
 #customer-details h6 {
   border-bottom: 2px solid #007bff;
   padding-bottom: 4px;
@@ -92,15 +90,25 @@ body {
 .profile-left, .profile-right {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
-/* Ensure action buttons align neatly under tables */
-.card-section .card-actions {
+/* Ensure tables + buttons alignment */
+.card-section table {
+  margin-bottom: 0.75rem;
+}
+.card-actions {
   margin-top: 0.5rem;
+  text-align: right;
 }
-
-/* Table cell vertical alignment */
 .table th, .table td {
   vertical-align: middle;
+}
+
+/* Service Request description in one line */
+.table td.sr-desc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 350px; /* adjust as needed */
 }
