@@ -1,11 +1,12 @@
 /*******************************************************
- * SampleCRM Frontend Script (2025-08, Full Refresh Fix)
- * Backend: Supabase (service requests, card status)
- * - All card + SR actions now reliably trigger UI refresh!
- * - Robust response handling, no more "manual search needed"
+ * SampleCRM Frontend Script (2025-08, Final Stable Build)
+ * - Based on last "Full Refresh" working version
+ * - Keeps API key in place
+ * - Fixes Reissue disable logic (case-insensitive)
+ * - Unified refresh after all actions (~900ms delay)
+ * - Robust, null-safe rendering of all sections
  *******************************************************/
 
-/* ================ CONFIGURATION ================ */
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A';
 const AUTH_TOKEN = API_KEY;
@@ -13,242 +14,123 @@ const AUTH_TOKEN = API_KEY;
 const RPC_BASE_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/`;
 const ENDPOINTS = {
   getCustomer: `${RPC_BASE_URL}get_customer_unified_search`,
-  webexAction: 'https://hooks.us.webexconnect.io/events/RHV57QR4M3',
+  webexAction: 'https://hooks.us.webexconnect.io/events/RHV57QR4M3'
 };
+let latestCustomer = null;
 
-let latestCustomer = null; // cached last-loaded customer profile
-
-/* ===== Helpers ===== */
-function showMessage(msg, type = 'info') {
+function showMessage(msg, type='info') {
   const bar = document.getElementById('messageBar');
   if (bar) {
-    bar.innerText = msg;
     bar.className = `alert alert-${type}`;
+    bar.innerText = msg;
     bar.style.display = 'block';
   }
 }
-function maskCard(cardNo) {
-  return (!cardNo || cardNo.length < 4) ? '' : '**** **** **** ' + cardNo.slice(-4);
-}
-function formatMoney(amt) {
-  const n = Number(amt);
-  return isNaN(n) ? '0.00' : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function formatDateDMYHM(dtStr) {
-  if (!dtStr) return '';
-  const d = new Date(dtStr);
-  if (isNaN(d)) return '';
-  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+function maskCard(c) { return (!c || c.length < 4) ? '' : '**** **** **** ' + c.slice(-4); }
+function formatMoney(a) { const n = Number(a); return isNaN(n) ? '0.00' : n.toLocaleString(undefined, {minimumFractionDigits:2}); }
+function formatDateDMYHM(dt) {
+  if (!dt) return '';
+  const d = new Date(dt); if (isNaN(d)) return '';
+  return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 function cardStatusBadge(status) {
   const lc = String(status).toLowerCase();
   if (lc === 'active') return `<span class="badge badge-status active">Active</span>`;
   if (lc === 'blocked') return `<span class="badge badge-status blocked">Blocked</span>`;
-  if (lc.includes('re-issue') || lc.includes('reissued')) return `<span class="badge badge-status reissued">Re-Issued</span>`;
+  if (lc.includes('re-issue') || lc.includes('reissued') || lc.includes('reissue')) return `<span class="badge badge-status reissued">Re-Issued</span>`;
+  if (lc === 'lost') return `<span class="badge badge-status lost">Lost</span>`;
   return `<span class="badge badge-status">${status}</span>`;
 }
 
-/* ===== Backend Calls ===== */
-async function fetchCustomer(identifier, searchType = 'auto') {
+async function fetchCustomer(identifier, searchType='auto') {
   const body = { p_mobile_no: null, p_account_number: null, p_email: null };
   if (searchType === 'email') body.p_email = identifier;
   else if (/^\d{8}$/.test(identifier)) body.p_account_number = identifier;
   else body.p_mobile_no = identifier;
 
-  const response = await fetch(ENDPOINTS.getCustomer, {
+  const r = await fetch(ENDPOINTS.getCustomer, {
     method: 'POST',
     headers: { apikey: API_KEY, Authorization: `Bearer ${AUTH_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  if (!response.ok) throw new Error(`API Error: ${response.status}`);
-  return response.json();
+  if (!r.ok) throw new Error(`API Error: ${r.status}`);
+  return r.json();
 }
-async function sendActionToWebexConnect(payload) {
-  const resp = await fetch(ENDPOINTS.webexAction, {
+async function sendAction(payload) {
+  const r = await fetch(ENDPOINTS.webexAction, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  try { return await resp.json(); } catch { return null; }
+  try { return await r.json(); } catch { return null; }
 }
 
-/* ===== Card Action Buttons Generation ===== */
 function renderCardActions(card, type) {
   const status = (card.status || '').toLowerCase();
-  let actions = '';
-  if (status !== 'blocked') actions += `<button class="btn btn-sm btn-block-card" data-type="${type}" data-no="${card.card_number}">Block</button> `;
-  else actions += `<button class="btn btn-sm btn-unblock-card" data-type="${type}" data-no="${card.card_number}">UnBlock</button> `;
-  const disabled = status === 're-issued' ? 'disabled' : '';
-  actions += `
-    <button class="btn btn-sm btn-reissue-card" data-type="${type}" data-no="${card.card_number}" ${disabled}>Reissue</button> 
-    <button class="btn btn-sm btn-mark-lost" data-type="${type}" data-no="${card.card_number}" ${disabled}>Lost</button> 
-    <button class="btn btn-sm btn-dispute" data-type="${type}" data-no="${card.card_number}" ${disabled}>Dispute</button>
-  `;
+  let actions = status !== 'blocked'
+    ? `<button class="btn btn-sm btn-block-card" data-type="${type}" data-no="${card.card_number}">Block</button> `
+    : `<button class="btn btn-sm btn-unblock-card" data-type="${type}" data-no="${card.card_number}">UnBlock</button> `;
+  const dis = (/re\-?issued?/i.test(status) || /lost/i.test(status)) ? 'disabled' : '';
+  actions += `<button class="btn btn-sm btn-reissue-card" data-type="${type}" data-no="${card.card_number}" ${dis}>Reissue</button>
+              <button class="btn btn-sm btn-mark-lost" data-type="${type}" data-no="${card.card_number}" ${dis}>Lost</button>
+              <button class="btn btn-sm btn-dispute" data-type="${type}" data-no="${card.card_number}" ${dis}>Dispute</button>`;
   return actions;
 }
 
-/* ===== Unified Action Handlers ===== */
 function bindActionHandlers(data) {
-  // --- CARD actions ---
   document.querySelectorAll('.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
     .forEach(btn => {
       btn.onclick = async () => {
-        const cardNo = btn.dataset.no;
-        const typeLabel = btn.dataset.type;
-        let actionType = null;
-
-        if (btn.classList.contains('btn-block-card')) actionType = 'Block';
-        else if (btn.classList.contains('btn-unblock-card')) actionType = 'UnBlock';
-        else if (btn.classList.contains('btn-reissue-card')) actionType = 'Reissue';
-        else if (btn.classList.contains('btn-mark-lost')) actionType = 'Lost';
-        else if (btn.classList.contains('btn-dispute')) actionType = 'Dispute';
-
-        // Confirm for Block/Unblock/Lost/Reissue
-        if (['Block', 'UnBlock', 'Reissue', 'Lost'].includes(actionType)) {
-          if (!confirm(`${actionType} this ${typeLabel} card?\nCard Number: ${cardNo.slice(-4)}`)) return;
-        }
-
-        const payload = {
-          custPhone: data.mobile_no,
-          custPhone2: data.mobile_no2,
-          custAccount: data.account_number || '',
-          custCard: cardNo,
-          cardType: typeLabel,
-          custEmail: data.email,
-          custAction: actionType,
-          serviceRequestType: "",
-          serviceDescription: ""
-        };
-
+        const cardNo = btn.dataset.no, typeLabel = btn.dataset.type;
+        let actionType = btn.classList.contains('btn-block-card') ? 'Block' :
+                         btn.classList.contains('btn-unblock-card') ? 'UnBlock' :
+                         btn.classList.contains('btn-reissue-card') ? 'Reissue' :
+                         btn.classList.contains('btn-mark-lost') ? 'Lost' : 'Dispute';
+        if (['Block','UnBlock','Reissue','Lost'].includes(actionType) && !confirm(`${actionType} this ${typeLabel} card?\nCard Number: ${cardNo.slice(-4)}`)) return;
+        const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:cardNo, cardType:typeLabel, custEmail:data.email, custAction:actionType, serviceRequestType:"", serviceDescription:"" };
         showMessage(`${actionType} request in progress...`, 'info');
-        let success = false, result = null;
-        try {
-          result = await sendActionToWebexConnect(payload);
-          // Accept any non-null, non-undefined result as success for UI purposes
-          success = (Array.isArray(result)) ? true
-                 : (result !== null && result !== undefined);
-        } catch {
-          // Even in error, attempt a refresh after warning
-          success = false;
-        }
-
-        let friendlyAction = (actionType === 'Block' ? 'blocked'
-                            : actionType === 'UnBlock' ? 'unblocked'
-                            : actionType.toLowerCase());
-
-        // Always trigger refresh after notification
-        if (success) {
-          showMessage(`Card successfully ${friendlyAction} for card ending ${cardNo.slice(-4)}.`, 'success');
-        } else {
-          showMessage(`Request sent; backend confirmation not parsed.`, 'warning');
-        }
-        setTimeout(() => document.getElementById('searchBtn').click(), 600);
+        await sendAction(payload);
+        setTimeout(()=>document.getElementById('searchBtn').click(), 900);
       };
     });
 
-  // --- New SR Modal ---
-  $("#newSRForm").off("submit").on("submit", async function(e) {
+  $("#newSRForm").off("submit").on("submit", async e => {
     e.preventDefault();
-    const srType = $("#srType").val().trim();
-    const srDesc = $("#srDesc").val().trim();
-    if (!srType || !srDesc) {
-      $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required.");
-      return;
-    }
-    const payload = {
-      custPhone: data.mobile_no,
-      custPhone2: data.mobile_no2,
-      custAccount: data.account_number || '',
-      custCard: "",
-      cardType: "",
-      custEmail: data.email,
-      custAction: "NewRequest",
-      serviceRequestType: srType,
-      serviceDescription: srDesc
-    };
-    $("#newSRAlert").removeClass('alert-danger').addClass('alert-info').show().text("Creating Service Request...");
-    let result = null, success = false;
-    try {
-      result = await sendActionToWebexConnect(payload);
-      success = (Array.isArray(result) && result.length > 0)
-            || (result && (result.status === "OK" || result.id || Object.keys(result).length > 0));
-    } catch { success = false; }
-    const reqId = Array.isArray(result) && result[0]?.request_id ? result[0].request_id : '';
-    if (success) {
-      $("#newSRAlert").removeClass('alert-info').addClass('alert-success')
-        .text(`Service Request${reqId ? ' #'+reqId : ''} created!`);
-      setTimeout(() => { $("#newSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 600);
-    } else {
-      $("#newSRAlert").removeClass('alert-info').addClass('alert-danger')
-        .text("Failed to create service request (but please check backend).");
-      setTimeout(() => document.getElementById('searchBtn').click(), 900);
-    }
+    const srType = $("#srType").val().trim(), srDesc = $("#srDesc").val().trim();
+    if (!srType || !srDesc) return $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required.");
+    const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:"", cardType:"", custEmail:data.email, custAction:"NewRequest", serviceRequestType:srType, serviceDescription:srDesc };
+    $("#newSRAlert").removeClass().addClass('alert alert-info').show().text("Creating Service Request...");
+    await sendAction(payload);
+    setTimeout(()=> { $("#newSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 900);
   });
 
-  // --- SR Update/Close Modal handler ---
   $(document).off("click", ".btn-update-sr, .btn-close-sr").on("click", ".btn-update-sr, .btn-close-sr", function() {
     const isUpdate = $(this).hasClass("btn-update-sr");
     const row = $(this).closest("tr");
-    const srType = row.find("td:nth-child(2)").text();
-    const srDesc = row.find(".sr-desc").attr("title") || "";
     $("#editSRModalLabel").text(isUpdate ? "Update Service Request" : "Close Service Request");
     $("#editSRAction").val(isUpdate ? "Update" : "Close");
-    $("#editSRType").val(srType);
-    $("#editSRDesc").val(srDesc);
-    $("#editSRAlert").hide().removeClass("alert-success alert-danger alert-info").text('');
+    $("#editSRType").val(row.find("td:nth-child(2)").text());
+    $("#editSRDesc").val(row.find(".sr-desc").attr("title") || "");
+    $("#editSRAlert").hide().removeClass();
     $("#editSRModal").modal("show");
   });
 
-  $("#editSRForm").off("submit").on("submit", async function(e) {
+  $("#editSRForm").off("submit").on("submit", async e => {
     e.preventDefault();
-    const action = $("#editSRAction").val();
-    const srType = $("#editSRType").val();
-    const srDesc = $("#editSRDesc").val().trim();
-    if (!srDesc) {
-      $("#editSRAlert").show().addClass('alert-danger').text("Description is required.");
-      return;
-    }
-    const payload = {
-      custPhone: data.mobile_no,
-      custPhone2: data.mobile_no2,
-      custAccount: data.account_number || '',
-      custCard: "",
-      cardType: "",
-      custEmail: data.email,
-      custAction: action, // "Update" or "Close"
-      serviceRequestType: srType,
-      serviceDescription: srDesc
-    };
-    $("#editSRAlert").removeClass('alert-danger').addClass('alert-info').show().text(`${action} in progress...`);
-    let result = null, success = false;
-    try {
-      result = await sendActionToWebexConnect(payload);
-      success = (Array.isArray(result) && result.length > 0)
-         || (result && (result.status === "OK" || result.id || Object.keys(result).length > 0));
-    } catch { success = false; }
-    if (success) {
-      $("#editSRAlert").removeClass('alert-info').addClass('alert-success')
-        .text(`Service Request ${action}d successfully!`);
-      setTimeout(() => { $("#editSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 700);
-    } else {
-      $("#editSRAlert").removeClass('alert-info').addClass('alert-danger')
-        .text(`${action} failed or not confirmed.`);
-      setTimeout(() => document.getElementById('searchBtn').click(), 1000);
-    }
+    const action = $("#editSRAction").val(), srType=$("#editSRType").val(), srDesc=$("#editSRDesc").val().trim();
+    if (!srDesc) return $("#editSRAlert").show().addClass('alert-danger').text("Description is required.");
+    const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:"", cardType:"", custEmail:data.email, custAction:action, serviceRequestType:srType, serviceDescription:srDesc };
+    $("#editSRAlert").removeClass().addClass('alert alert-info').show().text(`${action} in progress...`);
+    await sendAction(payload);
+    setTimeout(()=>{ $("#editSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 900);
   });
 }
 
-/* ========== CUSTOMER PROFILE RENDER ========== */
 async function showCustomer(data) {
   latestCustomer = data;
-  const detailsDiv = document.getElementById('customer-details');
-  if (!data || data.error) {
-    detailsDiv.style.display = 'none';
-    showMessage(data?.error ?? 'No customer found.', 'danger');
-    return;
-  }
-  detailsDiv.style.display = 'block';
-  document.getElementById('messageBar').style.display = 'none';
+  const div = document.getElementById('customer-details');
+  if (!data || data.error) { div.style.display='none'; return showMessage(data?.error || 'No customer found.', 'danger'); }
+  div.style.display = 'block'; document.getElementById('messageBar').style.display='none';
 
   let html = `<div class="card p-3 mb-3 bg-light border-primary">
     <div class="row">
@@ -267,13 +149,11 @@ async function showCustomer(data) {
     </div>
   </div>`;
 
-  // Debit cards
   html += `<h6 class="text-primary">Debit Card</h6>`;
   html += (data.debit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
-      ${
-        (data.recent_transactions || []).length
+      ${(data.recent_transactions || []).length
         ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead><tbody>${
             data.recent_transactions.map(tx => `
               <tr>
@@ -283,19 +163,15 @@ async function showCustomer(data) {
                 <td>${tx.reference_note || ''}</td>
               </tr>`).join('')
           }</tbody></table>`
-        : '<p>No debit card transactions found.</p>'
-      }
+        : '<p>No debit card transactions found.</p>'}
       <div class="card-actions">${renderCardActions(c, "Debit")}</div>
-    </div>
-  `).join('');
+    </div>`).join('');
 
-  // Credit cards
   html += `<h6 class="text-primary">Credit Card</h6>`;
   html += (data.credit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
-      ${
-        (c.transactions && c.transactions.length)
+      ${(c.transactions && c.transactions.length)
         ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead><tbody>${
              c.transactions.map(tx => `
                <tr>
@@ -305,13 +181,10 @@ async function showCustomer(data) {
                  <td>${tx.reference_note || ''}</td>
                </tr>`).join('')
           }</tbody></table>`
-        : '<p>No credit card transactions found.</p>'
-      }
+        : '<p>No credit card transactions found.</p>'}
       <div class="card-actions">${renderCardActions(c, "Credit")}</div>
-    </div>
-  `).join('');
+    </div>`).join('');
 
-  // Service Requests
   html += `<h6 class="text-primary">Service Requests</h6>`;
   html += (data.service_requests || []).length
     ? `<table class="table table-sm table-bordered">
@@ -324,64 +197,34 @@ async function showCustomer(data) {
              <td>${formatDateDMYHM(sr.raised_date)}</td>
              <td>${sr.resolution_date ? formatDateDMYHM(sr.resolution_date) : '-'}</td>
              <td class="sr-desc" title="${sr.description || ''}">${sr.description || ''}</td>
-             <td>
-               ${sr.status === 'Open'
+             <td>${sr.status === 'Open'
                   ? `<button class="btn btn-sm btn-update-sr" data-srid="${sr.request_id}">Update</button>
                      <button class="btn btn-sm btn-close-sr" data-srid="${sr.request_id}">Close</button>`
-                  : ''}
-             </td>
+                  : ''}</td>
            </tr>`).join('')}
          </tbody>
        </table>
-       <div class="mt-2 text-right">
-         <button id="newSRBtn" class="btn btn-primary">Create New Service Request</button>
-       </div>`
+       <div class="mt-2 text-right"><button id="newSRBtn" class="btn btn-primary">Create New Service Request</button></div>`
     : `<p>No service requests found.</p><div class="mt-2 text-right"><button id="newSRBtn" class="btn btn-primary">Create New Service Request</button></div>`;
 
-  detailsDiv.innerHTML = html;
+  div.innerHTML = html;
   bindActionHandlers(data);
 }
 
-/* ========== MAIN INITIALISATION ========== */
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('currentDate').textContent =
-    new Date().toLocaleString('en-GB', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
+  document.getElementById('currentDate').textContent = new Date().toLocaleString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
   const searchBtn = document.getElementById('searchBtn');
   const searchField = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
 
-  searchField.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); searchBtn.click(); }
-  });
-
+  searchField.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); searchBtn.click(); } });
   searchBtn.onclick = async () => {
     const val = searchField.value.trim();
-    if (!val) {
-      showMessage('Please enter a mobile, account, or email.', 'warning');
-      detailsDiv.style.display = 'none';
-      return;
-    }
-    showMessage('Loading customer info...', 'info');
-    detailsDiv.style.display = 'none';
-    let type = val.includes('@') ? 'email' : /^\d{8}$/.test(val) ? 'account' : 'mobile';
-    try {
-      const data = await fetchCustomer(val, type);
-      await showCustomer(data);
-    } catch (err) {
-      detailsDiv.style.display = 'none';
-      showMessage('Error fetching data.', 'danger');
-    }
+    if (!val) { showMessage('Please enter a mobile, account, or email.', 'warning'); detailsDiv.style.display='none'; return; }
+    showMessage('Loading customer info...', 'info'); detailsDiv.style.display='none';
+    let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
+    try { const data = await fetchCustomer(val,type); await showCustomer(data); }
+    catch { detailsDiv.style.display='none'; showMessage('Error fetching data.', 'danger'); }
   };
-
-  // Show New SR Modal
-  $(document).on('click', '#newSRBtn', function () {
-    if (!latestCustomer) {
-      showMessage('Load a customer first.', 'danger');
-      return false;
-    }
-    $("#newSRModal").modal("show");
-  });
+  $(document).on('click', '#newSRBtn', () => { if (!latestCustomer){ showMessage('Load a customer first.','danger'); return; } $("#newSRModal").modal("show"); });
 });
