@@ -9,6 +9,8 @@ const ENDPOINTS = {
   webexAction: `https://hooks.us.webexconnect.io/events/RHV57QR4M3`
 };
 
+let latestCustomer = null;
+
 // === Helpers ===
 function showMessage(message, type = 'info') {
   const msgDiv = document.getElementById('messageBar');
@@ -27,6 +29,13 @@ function formatDateDMY(dtStr) {
   if (!dtStr) return 'N/A';
   const d = new Date(dtStr);
   return isNaN(d) ? 'N/A' : `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+}
+function cardStatusBadge(status) {
+  const lc = String(status).toLowerCase();
+  if (lc === 'active') return `<span class="badge badge-status active">Active</span>`;
+  if (lc === 'blocked') return `<span class="badge badge-status blocked">Blocked</span>`;
+  if (lc === 'reissued' || lc === 're-isssued' || lc === 're-issue') return `<span class="badge badge-status reissued">Re-Issued</span>`;
+  return `<span class="badge badge-status">${status}</span>`;
 }
 
 // === API ===
@@ -48,7 +57,6 @@ async function fetchCustomer(identifier, searchType = 'auto') {
   if (!response.ok) throw new Error(`API Error: ${response.status}`);
   return response.json();
 }
-
 async function sendActionToWebexConnect(payload) {
   const resp = await fetch(ENDPOINTS.webexAction, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -62,19 +70,18 @@ function renderCardActions(card, type) {
   const status = card.status.toLowerCase();
   const disabled = status === 'reissue' ? 'disabled' : '';
   let actions = '';
-
   if (status !== 'blocked' && !disabled) {
-    actions += `<button class="btn btn-sm btn-danger btn-block-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}">Block</button> `;
+    actions += `<button class="btn btn-sm btn-block-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}">Block</button> `;
   } else if (status === 'blocked') {
-    actions += `<button class="btn btn-sm btn-success btn-unblock-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}">UnBlock</button> `;
+    actions += `<button class="btn btn-sm btn-unblock-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}">UnBlock</button> `;
   }
-  actions += `<button class="btn btn-sm btn-warning btn-reissue-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Reissue</button> `;
-  actions += `<button class="btn btn-sm btn-secondary btn-mark-lost" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Mark Lost</button> `;
-  actions += `<button class="btn btn-sm btn-info btn-dispute" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Dispute</button>`;
+  actions += `<button class="btn btn-sm btn-reissue-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Reissue</button> `;
+  actions += `<button class="btn btn-sm btn-mark-lost" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Mark Lost</button> `;
+  actions += `<button class="btn btn-sm btn-dispute" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Dispute</button>`;
   return actions;
 }
 
-// === Bind Actions ===
+// === Bind actions + SR modal logic ===
 function bindActionHandlers(data) {
   document.querySelectorAll('.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
     .forEach(btn => {
@@ -113,10 +120,46 @@ function bindActionHandlers(data) {
         } else showMessage(`Request sent but not confirmed.`, 'warning');
       };
     });
+
+  // New SR Modal binding:
+  $("#newSRModal").on('show.bs.modal', function() {
+    $("#newSRAlert").hide().removeClass("alert-success alert-danger").text('');
+    $("#srType").val(''); $("#srDesc").val('');
+  });
+  $("#newSRForm").off("submit").on("submit", async function(e){
+    e.preventDefault();
+    const srType = $("#srType").val();
+    const srDesc = $("#srDesc").val();
+    if(!srType || !srDesc) {
+      $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required."); return;
+    }
+    // Compose payload for request creation
+    const payload = {
+      custPhone: data.mobile_no,
+      custPhone2: data.mobile_no2,
+      custAccount: data.account_number,
+      custCard: "",
+      cardType: "",
+      custEmail: data.email,
+      custAction: "NewRequest",
+      serviceRequestType: srType,
+      serviceDescription: srDesc
+    };
+    $("#newSRAlert").show().removeClass('alert-danger').addClass('alert-info').text("Creating Service Request...");
+    const result = await sendActionToWebexConnect(payload);
+    if(result.status === 'OK' || result.id) {
+      $("#newSRAlert").removeClass('alert-info').addClass('alert-success').text("Service Request created!");
+      setTimeout(()=>{$("#newSRModal").modal('hide');},1500);
+      // Optionally re-fetch customer to refresh table
+    } else {
+      $("#newSRAlert").removeClass('alert-info').addClass('alert-danger').text("Failed to create service request.");
+    }
+  });
 }
 
 // === Main Render ===
 async function showCustomer(data) {
+  latestCustomer = data; // For modal SR creation
   const detailsDiv = document.getElementById('customer-details');
   if (!data || data.error) {
     detailsDiv.style.display = 'none';
@@ -148,7 +191,8 @@ async function showCustomer(data) {
   html += `<h6 class="text-primary">Debit Card</h6>`;
   html += (data.debit_cards || []).map(c =>
     `<div class="border rounded p-2 mb-2 bg-white card-section">
-      ${maskCard(c.card_number)} - ${c.status}
+      ${maskCard(c.card_number)}
+      ${cardStatusBadge(c.status)}
       ${(data.recent_transactions || []).length
         ? `<table class="table table-sm table-bordered">
             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
@@ -169,7 +213,8 @@ async function showCustomer(data) {
   html += `<h6 class="text-primary">Credit Card</h6>`;
   html += (data.credit_cards || []).map(c =>
     `<div class="border rounded p-2 mb-2 bg-white card-section">
-      ${maskCard(c.card_number)} - ${c.status}
+      ${maskCard(c.card_number)}
+      ${cardStatusBadge(c.status)}
       ${(c.transactions && c.transactions.length)
         ? `<table class="table table-sm table-bordered">
             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
@@ -190,7 +235,10 @@ async function showCustomer(data) {
   html += `<h6 class="text-primary">Service Requests</h6>`;
   html += (data.service_requests || []).length
     ? `<table class="table table-sm table-bordered">
-        <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Raised</th><th>Resolution</th><th>Description</th><th>Actions</th></tr></thead>
+        <thead><tr>
+          <th>ID</th><th>Type</th><th>Status</th>
+          <th>Raised</th><th>Resolution</th>
+          <th>Description</th><th>Actions</th></tr></thead>
         <tbody>
           ${data.service_requests.map(sr => `
             <tr>
@@ -208,14 +256,15 @@ async function showCustomer(data) {
               </td>
             </tr>`).join('')}
         </tbody>
-      </table>`
-    : `<p>No service requests found.</p>`;
+      </table>
+      <div class="mt-2 text-right"><button id="newSRBtn" type="button" class="btn btn-primary btn-demo" data-toggle="modal" data-target="#newSRModal">Create New Service Request</button></div>`
+    : `<p>No service requests found.</p>
+      <div class="mt-2 text-right"><button id="newSRBtn" type="button" class="btn btn-primary btn-demo" data-toggle="modal" data-target="#newSRModal">Create New Service Request</button></div>`;
 
   detailsDiv.innerHTML = html;
   bindActionHandlers(data);
 }
 
-// === Init ===
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('currentDate').textContent =
     new Date().toLocaleString('en-GB', {weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -232,4 +281,13 @@ document.addEventListener('DOMContentLoaded', () => {
     try { const data = await fetchCustomer(val, type); await showCustomer(data); }
     catch { detailsDiv.style.display = 'none'; showMessage('Error fetching data.','danger'); }
   };
+
+  // Modal SR button (delegated) -- open modal only if customer loaded
+  $(document).on('click', '#newSRBtn', function(e){
+    if(!latestCustomer) {
+      showMessage('Load a customer first.','danger');
+      return false;
+    }
+    $("#newSRModal").modal("show");
+  });
 });
