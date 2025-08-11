@@ -1,6 +1,6 @@
 /* Base page styles */
 body {
-  background: #f9fafb;
+  background: #f9fafb; /* matches original */
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
@@ -73,8 +73,34 @@ body {
   font-weight: 500;
 }
 
-/* Current date text styling */
+/* Current date */
 #currentDate {
   font-size: 0.9em;
   color: #6c757d;
+}
+
+/* ===== Added for latest build ===== */
+
+/* Section heading styling inside customer details */
+#customer-details h6 {
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 4px;
+  margin-top: 1.5rem;
+}
+
+/* Balanced profile columns */
+.profile-left, .profile-right {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Ensure action buttons align neatly under tables */
+.card-section .card-actions {
+  margin-top: 0.5rem;
+}
+
+/* Table cell vertical alignment */
+.table th, .table td {
+  vertical-align: middle;
 }
