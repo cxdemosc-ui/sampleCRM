@@ -1,62 +1,53 @@
-/****************************************************
- * SampleCRM Frontend Script
- * Integrates:
- *  - Customer search via Supabase RPC
- *  - Display of customer profile, cards, and service requests
- *  - Card actions via Webex Connect webhook → Supabase RPC
- *  - Service Request create, update, and close flows
- *  - Automatic refresh after actions
- ****************************************************/
+/*******************************************************
+ * SampleCRM Frontend Script (Revised 2025-08)
+ * - Backend: Supabase (manage_service_request, update_card_status)
+ * - Cards, Service Requests: Block/Unblock/Lost/Reissue/Dispute/Update/Close
+ * - Automatic UI refresh, robust backend response handling
+ *******************************************************/
 
-/* ========= CONFIGURATION ========= */
+/* ================ CONFIGURATION ================ */
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
+const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A'; // Use your real anon key
+const AUTH_TOKEN = API_KEY; // If JWT auth same as anon key
+
 const RPC_BASE_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/`;
-
-/* Your actual Supabase anon key */
-const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A';
-const AUTH_TOKEN = API_KEY;
-
-/* API Endpoints */
 const ENDPOINTS = {
   getCustomer: `${RPC_BASE_URL}get_customer_unified_search`,
-  webexAction: `https://hooks.us.webexconnect.io/events/RHV57QR4M3` // Webhook that calls Supabase RPCs
+  webexAction: 'https://hooks.us.webexconnect.io/events/RHV57QR4M3',
 };
 
-/* Cache of last fetched customer */
-let latestCustomer = null;
+let latestCustomer = null; // cache of the current customer for actions
 
-/* ========= GENERAL HELPERS ========= */
-
-/** Show Bootstrap alert in #messageBar */
-function showMessage(message, type = 'info') {
-  const msgDiv = document.getElementById('messageBar');
-  msgDiv.innerText = message;
-  msgDiv.className = `alert alert-${type}`;
-  msgDiv.style.display = 'block';
+/* ================ HELPERS ================ */
+// Show alert in message bar
+function showMessage(msg, type = 'info') {
+  const bar = document.getElementById('messageBar');
+  bar.innerText = msg;
+  bar.className = `alert alert-${type}`;
+  bar.style.display = 'block';
 }
 
-/** Mask card number to show only last 4 digits */
-function maskCard(num) {
-  return (!num || num.length < 4) ? '' : '**** **** **** ' + num.slice(-4);
+// Return masked card (****1234)
+function maskCard(cardNo) {
+  return (!cardNo || cardNo.length < 4) ? '' : '**** **** **** ' + cardNo.slice(-4);
 }
 
-/** Format number with commas & 2 decimals */
+// Money formatting
 function formatMoney(amount) {
   const n = Number(amount);
-  return isNaN(n) ? '0.00' : n.toLocaleString(undefined,
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return isNaN(n) ? '0.00' : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** Format to dd-mm-yyyy hh:mm */
+// Date formatting
 function formatDateDMYHM(dtStr) {
-  if (!dtStr) return 'N/A';
+  if (!dtStr) return '';
   const d = new Date(dtStr);
-  if (isNaN(d)) return 'N/A';
+  if (isNaN(d)) return '';
   return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()} `
        + `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-/** Return HTML for status badge */
+// Card status badge
 function cardStatusBadge(status) {
   const lc = String(status).toLowerCase();
   if (lc === 'active') return `<span class="badge badge-status active">Active</span>`;
@@ -65,9 +56,8 @@ function cardStatusBadge(status) {
   return `<span class="badge badge-status">${status}</span>`;
 }
 
-/* ========= API CALLS ========= */
-
-/** Fetch full customer data from Supabase */
+/* ================ API CALLS ================ */
+// Unified customer search RPC
 async function fetchCustomer(identifier, searchType = 'auto') {
   const body = { p_mobile_no: null, p_account_number: null, p_email: null };
   if (searchType === 'email') body.p_email = identifier;
@@ -76,74 +66,69 @@ async function fetchCustomer(identifier, searchType = 'auto') {
 
   const response = await fetch(ENDPOINTS.getCustomer, {
     method: 'POST',
-    headers: {
-      apikey: API_KEY,
-      Authorization: `Bearer ${AUTH_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
+    headers: { apikey: API_KEY, Authorization: `Bearer ${AUTH_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-
   if (!response.ok) throw new Error(`API Error: ${response.status}`);
   return response.json();
 }
 
-/** Send action payload to Webex Connect webhook */
+// Send action for cards/SRs to Webex Connect (which calls Supabase)
 async function sendActionToWebexConnect(payload) {
   const resp = await fetch(ENDPOINTS.webexAction, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return resp.json().catch(() => ({}));
+  // Always safely parse to object/array/null
+  try { return await resp.json(); } catch { return null; }
 }
 
-/* ========= UI HELPERS ========= */
-
-/** Render HTML buttons for a card's possible actions */
+/* =========== UI: ACTIONS SECTION =========== */
+// Generate card action buttons (auto includes allowed actions)
 function renderCardActions(card, type) {
-  const status = card.status.toLowerCase();
-  const disabled = status === 'reissue' ? 'disabled' : '';
+  const status = (card.status || '').toLowerCase();
   let actions = '';
 
-  if (status !== 'blocked' && !disabled) {
-    actions += `<button class="btn btn-sm btn-block-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}">Block</button> `;
-  } else if (status === 'blocked') {
-    actions += `<button class="btn btn-sm btn-unblock-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}">UnBlock</button> `;
+  if (status !== 'blocked') {
+    actions += `<button class="btn btn-sm btn-block-card" data-type="${type}" data-no="${card.card_number}">Block</button> `;
+  } else {
+    actions += `<button class="btn btn-sm btn-unblock-card" data-type="${type}" data-no="${card.card_number}">UnBlock</button> `;
   }
+  // Always allow other actions except on re-issued (demo logic)
+  const disabled = status === 're-issued' ? 'disabled' : '';
   actions += `
-    <button class="btn btn-sm btn-reissue-card" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Reissue</button> 
-    <button class="btn btn-sm btn-mark-lost" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Mark Lost</button> 
-    <button class="btn btn-sm btn-dispute" data-type="${type}" data-no="${card.card_number}" data-status="${card.status}" ${disabled}>Dispute</button>
+    <button class="btn btn-sm btn-reissue-card" data-type="${type}" data-no="${card.card_number}" ${disabled}>Reissue</button> 
+    <button class="btn btn-sm btn-mark-lost" data-type="${type}" data-no="${card.card_number}" ${disabled}>Lost</button> 
+    <button class="btn btn-sm btn-dispute" data-type="${type}" data-no="${card.card_number}" ${disabled}>Dispute</button>
   `;
   return actions;
 }
 
-/* ========= ACTION HANDLERS ========= */
-
-/** Bind handlers for card actions + SR modals */
+/* =========== BIND/INVOKE ALL ACTIONS =========== */
+// Called after `showCustomer()` on initial load & every refresh
 function bindActionHandlers(data) {
 
-  /* ---- Card Actions ---- */
+  // --- Card Actions ---
   document.querySelectorAll('.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
     .forEach(btn => {
       btn.onclick = async () => {
         const cardNo = btn.dataset.no;
-        const status = btn.dataset.status;
         const typeLabel = btn.dataset.type;
+        let actionType = null;
 
-        const actionType = btn.classList.contains('btn-block-card') ? 'Block'
-                         : btn.classList.contains('btn-unblock-card') ? 'UnBlock'
-                         : btn.classList.contains('btn-reissue-card') ? 'Reissue'
-                         : btn.classList.contains('btn-mark-lost') ? 'Lost'
-                         : 'Dispute';
+        if (btn.classList.contains('btn-block-card')) actionType = 'Block';
+        else if (btn.classList.contains('btn-unblock-card')) actionType = 'UnBlock';
+        else if (btn.classList.contains('btn-reissue-card')) actionType = 'Reissue';
+        else if (btn.classList.contains('btn-mark-lost')) actionType = 'Lost';
+        else if (btn.classList.contains('btn-dispute')) actionType = 'Dispute';
 
-        // Confirm destructive actions
-        if (['Block', 'UnBlock', 'Reissue'].includes(actionType)) {
-          if (!confirm(`${actionType} this ${typeLabel} card?\nCard Number: ${cardNo}\nStatus: ${status}`)) return;
+        // Confirm for destructive actions
+        if (['Block', 'UnBlock', 'Reissue', 'Lost'].includes(actionType)) {
+          if (!confirm(`${actionType} this ${typeLabel} card?\nCard Number: ${cardNo.slice(-4)}`)) return;
         }
 
-        // Payload for Webhook
+        // Webhook payload
         const payload = {
           custPhone: data.mobile_no,
           custPhone2: data.mobile_no2,
@@ -160,16 +145,26 @@ function bindActionHandlers(data) {
 
         const result = await sendActionToWebexConnect(payload);
 
-        if (result && (result.status === 'OK' || result.length)) {
-          showMessage(`${actionType} completed for card ending ${cardNo.slice(-4)}.`, 'success');
-          setTimeout(() => document.getElementById('searchBtn').click(), 800);
+        // Accept success if: non-empty array, status OK, or any object with keys
+        const success = Array.isArray(result)
+          ? result.length > 0
+          : (result && (result.status === 'OK' || Object.keys(result).length > 0));
+
+        let friendlyAction = (actionType === 'Block' ? 'blocked'
+                              : actionType === 'UnBlock' ? 'unblocked'
+                              : actionType.toLowerCase());
+
+        if (success) {
+          showMessage(`Card successfully ${friendlyAction} for card ending ${cardNo.slice(-4)}.`, 'success');
+          setTimeout(() => document.getElementById('searchBtn').click(), 700);
         } else {
-          showMessage(`Request sent but update confirmation not received.`, 'warning');
+          showMessage(`Request sent but confirmation not in expected format. Refreshing...`, 'warning');
+          setTimeout(() => document.getElementById('searchBtn').click(), 1300);
         }
       };
     });
 
-  /* ---- Create Service Request ---- */
+  // --- Create Service Request Modal ---
   $("#newSRForm").off("submit").on("submit", async function(e) {
     e.preventDefault();
     const srType = $("#srType").val().trim();
@@ -191,21 +186,29 @@ function bindActionHandlers(data) {
     };
     $("#newSRAlert").removeClass('alert-danger').addClass('alert-info').show().text("Creating Service Request...");
     const result = await sendActionToWebexConnect(payload);
-    if (result.status === 'OK' || result.id) {
-      $("#newSRAlert").removeClass('alert-info').addClass('alert-success').text("Service Request created!");
-      setTimeout(() => { $("#newSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 900);
+
+    // Check for array/object/OK/id
+    const success = Array.isArray(result) ? result.length > 0
+                  : result && (result.status === "OK" || result.id || Object.keys(result).length > 0);
+
+    const reqId = Array.isArray(result) && result[0]?.request_id ? result[0].request_id : '';
+
+    if (success) {
+      $("#newSRAlert").removeClass('alert-info').addClass('alert-success')
+        .text(`Service Request${reqId ? ' #'+reqId : ''} created!`);
+      setTimeout(() => { $("#newSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 700);
     } else {
-      $("#newSRAlert").removeClass('alert-info').addClass('alert-danger').text("Failed to create service request.");
+      $("#newSRAlert").removeClass('alert-info').addClass('alert-danger')
+        .text("Failed to create service request.");
     }
   });
 
-  /* ---- Update / Close Service Request ---- */
+  // --- Update/Close Service Request Modal ---
   $(document).off("click", ".btn-update-sr, .btn-close-sr").on("click", ".btn-update-sr, .btn-close-sr", function() {
     const isUpdate = $(this).hasClass("btn-update-sr");
     const row = $(this).closest("tr");
     const srType = row.find("td:nth-child(2)").text();
     const srDesc = row.find(".sr-desc").attr("title") || "";
-
     $("#editSRModalLabel").text(isUpdate ? "Update Service Request" : "Close Service Request");
     $("#editSRAction").val(isUpdate ? "Update" : "Close");
     $("#editSRType").val(srType);
@@ -214,6 +217,7 @@ function bindActionHandlers(data) {
     $("#editSRModal").modal("show");
   });
 
+  // Handler for Update/Close modal submit
   $("#editSRForm").off("submit").on("submit", async function(e) {
     e.preventDefault();
     const action = $("#editSRAction").val();
@@ -230,106 +234,105 @@ function bindActionHandlers(data) {
       custCard: "",
       cardType: "",
       custEmail: data.email,
-      custAction: action, // Update / Close
+      custAction: action, // "Update" or "Close"
       serviceRequestType: srType,
       serviceDescription: srDesc
     };
     $("#editSRAlert").removeClass('alert-danger').addClass('alert-info').show().text(`${action} in progress...`);
     const result = await sendActionToWebexConnect(payload);
-    if (result.status === 'OK' || result.id) {
-      $("#editSRAlert").removeClass('alert-info').addClass('alert-success').text(`Service Request ${action}d successfully!`);
-      setTimeout(() => { $("#editSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 900);
+    const success = Array.isArray(result) ? result.length > 0
+                  : result && (result.status === "OK" || result.id || Object.keys(result).length > 0);
+
+    if (success) {
+      $("#editSRAlert").removeClass('alert-info').addClass('alert-success')
+        .text(`Service Request ${action}d successfully!`);
+      setTimeout(() => { $("#editSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 800);
     } else {
-      $("#editSRAlert").removeClass('alert-info').addClass('alert-danger').text(`${action} failed.`);
+      $("#editSRAlert").removeClass('alert-info').addClass('alert-danger')
+        .text(`${action} failed or not confirmed.`);
     }
   });
 }
 
-/* ========= MAIN RENDER ========= */
-
-/** Render profile, cards, and service requests for a customer */
+/* ========== CUSTOMER PROFILE RENDER ========= */
+// Main render after search/refresh; re-binds all handlers
 async function showCustomer(data) {
   latestCustomer = data;
   const detailsDiv = document.getElementById('customer-details');
-
   if (!data || data.error) {
     detailsDiv.style.display = 'none';
     showMessage(data?.error ?? 'No customer found.', 'danger');
     return;
   }
-
   detailsDiv.style.display = 'block';
   document.getElementById('messageBar').style.display = 'none';
 
-  let html = `
-    <div class="card p-3 mb-3 bg-light border-primary">
-      <div class="row">
-        <div class="col-md-6">
-          <h5 class="text-primary">${data.customer_first_name || data.first_name} ${data.customer_last_name || data.last_name}</h5>
-          <div><strong>Mobile:</strong> ${data.mobile_no}</div>
-          <div><strong>Alt Mobile:</strong> ${data.mobile_no2}</div>
-          <div><strong>Email:</strong> ${data.email}</div>
-        </div>
-        <div class="col-md-6">
-          <div><strong>Address:</strong> ${data.customer_address || data.address || 'N/A'}</div>
-          <div><strong>City:</strong> ${data.customer_city || data.city || 'N/A'}</div>
-          <div><strong>Account Number:</strong> ${data.account_number || 'N/A'}</div>
-          <div><strong>Account Balance:</strong> $${formatMoney(data.account_balance)}</div>
-        </div>
+  let html = `<div class="card p-3 mb-3 bg-light border-primary">
+    <div class="row">
+      <div class="col-md-6">
+        <h5 class="text-primary">${data.customer_first_name || data.first_name} ${data.customer_last_name || data.last_name}</h5>
+        <div><strong>Mobile:</strong> ${data.mobile_no}</div>
+        <div><strong>Alt Mobile:</strong> ${data.mobile_no2}</div>
+        <div><strong>Email:</strong> ${data.email}</div>
+      </div>
+      <div class="col-md-6">
+        <div><strong>Address:</strong> ${data.customer_address || data.address || 'N/A'}</div>
+        <div><strong>City:</strong> ${data.customer_city || data.city || 'N/A'}</div>
+        <div><strong>Account Number:</strong> ${data.account_number || 'N/A'}</div>
+        <div><strong>Account Balance:</strong> $${formatMoney(data.account_balance)}</div>
       </div>
     </div>
-  `;
+  </div>`;
 
-  /* Debit Cards */
+  // Debit cards
   html += `<h6 class="text-primary">Debit Card</h6>`;
   html += (data.debit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
-      ${(data.recent_transactions || []).length
-        ? `<table class="table table-sm table-bordered">
-             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-             <tbody>${data.recent_transactions.map(tx => `
-               <tr>
-                 <td>${formatDateDMYHM(tx.transaction_date)}</td>
-                 <td>${tx.transaction_type}</td>
-                 <td>${formatMoney(tx.amount)}</td>
-                 <td>${tx.reference_note || ''}</td>
-               </tr>`).join('')}
-             </tbody>
-           </table>`
-        : '<p>No debit card transactions found.</p>'}
+      ${
+        (data.recent_transactions || []).length 
+        ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead><tbody>${
+            data.recent_transactions.map(tx => `
+              <tr>
+                <td>${formatDateDMYHM(tx.transaction_date)}</td>
+                <td>${tx.transaction_type}</td>
+                <td>${formatMoney(tx.amount)}</td>
+                <td>${tx.reference_note || ''}</td>
+              </tr>`).join('')
+          }</tbody></table>`
+        : '<p>No debit card transactions found.</p>'
+      }
       <div class="card-actions">${renderCardActions(c, "Debit")}</div>
     </div>
   `).join('');
 
-  /* Credit Cards */
+  // Credit cards
   html += `<h6 class="text-primary">Credit Card</h6>`;
   html += (data.credit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
-      ${(c.transactions && c.transactions.length)
-        ? `<table class="table table-sm table-bordered">
-             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-             <tbody>${c.transactions.map(tx => `
+      ${
+        (c.transactions && c.transactions.length)
+        ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead><tbody>${
+             c.transactions.map(tx => `
                <tr>
                  <td>${formatDateDMYHM(tx.transaction_date)}</td>
                  <td>${tx.transaction_type}</td>
                  <td>${formatMoney(tx.amount)}</td>
                  <td>${tx.reference_note || ''}</td>
-               </tr>`).join('')}
-             </tbody>
-           </table>`
-        : '<p>No credit card transactions found.</p>'}
+               </tr>`).join('')
+          }</tbody></table>`
+        : '<p>No credit card transactions found.</p>'
+      }
       <div class="card-actions">${renderCardActions(c, "Credit")}</div>
     </div>
   `).join('');
 
-  /* Service Requests */
+  // Service Requests
   html += `<h6 class="text-primary">Service Requests</h6>`;
   html += (data.service_requests || []).length
     ? `<table class="table table-sm table-bordered">
-         <thead><tr><th>ID</th><th>Type</th><th>Status</th>
-         <th>Raised</th><th>Resolution</th><th>Description</th><th>Actions</th></tr></thead>
+         <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Raised</th><th>Resolution</th><th>Description</th><th>Actions</th></tr></thead>
          <tbody>${data.service_requests.map(sr => `
            <tr>
              <td>${sr.request_id}</td>
@@ -350,23 +353,19 @@ async function showCustomer(data) {
        <div class="mt-2 text-right">
          <button id="newSRBtn" class="btn btn-primary">Create New Service Request</button>
        </div>`
-    : `<p>No service requests found.</p>
-       <div class="mt-2 text-right">
-         <button id="newSRBtn" class="btn btn-primary">Create New Service Request</button>
-       </div>`;
+    : `<p>No service requests found.</p><div class="mt-2 text-right"><button id="newSRBtn" class="btn btn-primary">Create New Service Request</button></div>`;
 
   detailsDiv.innerHTML = html;
   bindActionHandlers(data);
 }
 
-/* ========= INITIALISATION ========= */
+/* ========== APP INIT ========== */
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('currentDate').textContent =
     new Date().toLocaleString('en-GB', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
       hour: '2-digit', minute: '2-digit'
     });
-
   const searchBtn = document.getElementById('searchBtn');
   const searchField = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
@@ -394,6 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  // Show New Service Request modal
   $(document).on('click', '#newSRBtn', function () {
     if (!latestCustomer) {
       showMessage('Load a customer first.', 'danger');
