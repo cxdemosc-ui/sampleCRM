@@ -7,7 +7,7 @@
  *******************************************************/
  
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
-const API_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A';
 const AUTH_TOKEN = API_KEY;
 const RPC_BASE_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/rest/v1/rpc/`;
 const ENDPOINTS = {
