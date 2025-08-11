@@ -2,40 +2,66 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Custom CRM</title>
+  <title>SampleCRM Portal</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
+
+  <!-- Bootstrap & Optional Theme -->
+  <link rel="stylesheet"
+        href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
+  
+  <!-- Custom Styles -->
   <link rel="stylesheet" href="style.css" />
+
+  <style>
+    /* Inline style additions for visual clarity */
+    body { background-color: #f4f7fb; }
+    .crm-icon { height: 48px; margin-right: 10px; }
+    .card-actions button { margin: 2px 4px 2px 0; }
+    .bg-light { background-color: #f8f9fa!important; }
+    #customer-details h6 { border-bottom: 2px solid #007bff; padding-bottom: 4px; margin-top: 1.5rem; }
+  </style>
 </head>
+
 <body>
   <div class="container mt-4" id="crm-app">
+    
+    <!-- === Header / Branding === -->
     <div class="d-flex align-items-center mb-3">
       <img 
         src="https://raw.githubusercontent.com/cxdemosc-ui/sampleCRM/main/CRM_sample_image.png" 
         alt="SampleCRM Logo" 
         class="crm-icon" 
       />
-      <h1>Custom CRM</h1>
+      <h1 class="mb-0">Custom CRM</h1>
       <div id="currentDate" class="ml-auto text-muted small"></div>
     </div>
     
-    <!-- Search UI -->
+    <!-- === Search Section === -->
     <div id="search-section" class="mb-4">
-      <label for="searchMobile">Enter Mobile Number, Account Number, or Email:</label>
+      <label for="searchMobile" class="font-weight-bold">
+        Enter Mobile Number, Account Number, or Email:
+      </label>
       <input 
         type="text" 
         id="searchMobile" 
         placeholder="Mobile Number, Account Number, or Email" 
         class="form-control" 
-        autocomplete="off" 
+        autocomplete="off"
       />
-      <button id="searchBtn" class="btn btn-primary mt-2">Search</button>
+      <button id="searchBtn" class="btn btn-primary mt-2">
+        Search
+      </button>
     </div>
 
+    <!-- === Message Bar for alerts === -->
     <div id="messageBar" class="alert mt-3" style="display:none;"></div>
-    <div id="customer-details" style="display:none;"></div>
-  </div>
 
-  <script src="script.js?v=20240725"></script>
+    <!-- === Customer Details Render Area === -->
+    <div id="customer-details" style="display:none;"></div>
+    
+  </div> <!-- /container -->
+
+  <!-- === Main Script === -->
+  <script src="script.js?v=20250811"></script>
 </body>
 </html>
