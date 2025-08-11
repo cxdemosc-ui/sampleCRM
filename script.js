@@ -1,10 +1,9 @@
 /*******************************************************
- * SampleCRM Frontend Script (2025-08, Final Stable Build + Savings Patch)
- * - Keeps API key in place
- * - Fixes Debit Card transactions to use card-specific data
- * - Adds dedicated Savings Account transactions section
+ * SampleCRM Frontend Script (2025-08, Final Stable Build + Fixes)
+ * - Fixes Debit Card view to use only card-specific transactions
+ * - Adds dedicated Savings Account Transactions section
+ * - Restores full Service Requests rendering
  * - Unified refresh after all actions (~900ms delay)
- * - Robust, null-safe rendering of all sections
  *******************************************************/
 
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
@@ -94,7 +93,6 @@ function bindActionHandlers(data) {
       };
     });
 
-  // Service request bindings remain unchanged...
   $("#newSRForm").off("submit").on("submit", async e => {
     e.preventDefault();
     const srType = $("#srType").val().trim(), srDesc = $("#srDesc").val().trim();
@@ -127,7 +125,7 @@ function bindActionHandlers(data) {
   });
 }
 
-// ------------ REVISED showCustomer() ------------
+// ---------------- showCustomer() with fixes ----------------
 async function showCustomer(data) {
   latestCustomer = data;
   const div = document.getElementById('customer-details');
@@ -155,79 +153,88 @@ async function showCustomer(data) {
     </div>
   </div>`;
 
-  // CHANGE: Debit section uses c.transactions instead of recent_transactions
+  // Debit Card section fix
   html += `<h6 class="text-primary">Debit Card</h6>`;
   html += (data.debit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
       ${(c.transactions && c.transactions.length)
-        ? `<table class="table table-sm table-bordered">
-             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-             <tbody>${c.transactions.map(tx => `
-               <tr>
-                 <td>${formatDateDMYHM(tx.transaction_date)}</td>
-                 <td>${tx.transaction_type}</td>
-                 <td>${formatMoney(tx.amount)}</td>
-                 <td>${tx.reference_note || ''}</td>
-               </tr>`).join('')}</tbody>
-           </table>`
+        ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+           <tbody>${c.transactions.map(tx => `
+             <tr>
+               <td>${formatDateDMYHM(tx.transaction_date)}</td>
+               <td>${tx.transaction_type}</td>
+               <td>${formatMoney(tx.amount)}</td>
+               <td>${tx.reference_note || ''}</td>
+             </tr>`).join('')}</tbody></table>`
         : '<p>No debit card transactions found.</p>'}
       <div class="card-actions">${renderCardActions(c, "Debit")}</div>
     </div>`).join('');
 
-  // Credit cards remain unchanged
+  // Credit Card section
   html += `<h6 class="text-primary">Credit Card</h6>`;
   html += (data.credit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
       ${(c.transactions && c.transactions.length)
-        ? `<table class="table table-sm table-bordered">
-             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-             <tbody>${c.transactions.map(tx => `
-               <tr>
-                 <td>${formatDateDMYHM(tx.transaction_date)}</td>
-                 <td>${tx.transaction_type}</td>
-                 <td>${formatMoney(tx.amount)}</td>
-                 <td>${tx.reference_note || ''}</td>
-               </tr>`).join('')}</tbody>
-           </table>`
+        ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+           <tbody>${c.transactions.map(tx => `
+             <tr>
+               <td>${formatDateDMYHM(tx.transaction_date)}</td>
+               <td>${tx.transaction_type}</td>
+               <td>${formatMoney(tx.amount)}</td>
+               <td>${tx.reference_note || ''}</td>
+             </tr>`).join('')}</tbody></table>`
         : '<p>No credit card transactions found.</p>'}
       <div class="card-actions">${renderCardActions(c, "Credit")}</div>
     </div>`).join('');
 
-  // CHANGE: Add Savings Account section
-  const savingsTxs = (data.recent_transactions || []).filter(
-    tx => tx.transaction_medium && tx.transaction_medium.toLowerCase() === 'savings'
-  );
+  // Savings Account section
+  const savingsTxs = (data.recent_transactions || []).filter(tx => tx.transaction_medium && tx.transaction_medium.toLowerCase() === 'savings');
   html += `<h6 class="text-primary">Savings Account Transactions</h6>`;
-  if (savingsTxs.length) {
-    html += `<table class="table table-sm table-bordered">
-      <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-      <tbody>${savingsTxs.map(tx => `
-        <tr>
-          <td>${formatDateDMYHM(tx.transaction_date)}</td>
-          <td>${tx.transaction_type}</td>
-          <td>${formatMoney(tx.amount)}</td>
-          <td>${tx.reference_note || ''}</td>
-        </tr>`).join('')}</tbody>
-    </table>`;
-  } else {
-    html += `<p>No savings account transactions found.</p>`;
-  }
+  html += savingsTxs.length
+    ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+       <tbody>${savingsTxs.map(tx => `
+         <tr>
+           <td>${formatDateDMYHM(tx.transaction_date)}</td>
+           <td>${tx.transaction_type}</td>
+           <td>${formatMoney(tx.amount)}</td>
+           <td>${tx.reference_note || ''}</td>
+         </tr>`).join('')}</tbody></table>`
+    : `<p>No savings account transactions found.</p>`;
 
-  // Service Requests unchanged
+  // Service Requests section restored
   html += `<h6 class="text-primary">Service Requests</h6>`;
   html += (data.service_requests || []).length
-    ? `<table class="table table-sm table-bordered"><thead>...</thead><tbody>...</tbody></table>`
-    : `<p>No service requests found.</p><div class="mt-2 text-right"><button id="newSRBtn" class="btn btn-primary">Create New Service Request</button></div>`;
+    ? `<table class="table table-sm table-bordered">
+         <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Raised</th><th>Resolution</th><th>Description</th><th>Actions</th></tr></thead>
+         <tbody>${data.service_requests.map(sr => `
+           <tr>
+             <td>${sr.request_id}</td>
+             <td>${sr.request_type}</td>
+             <td>${sr.status}</td>
+             <td>${formatDateDMYHM(sr.raised_date)}</td>
+             <td>${sr.resolution_date ? formatDateDMYHM(sr.resolution_date) : '-'}</td>
+             <td class="sr-desc" title="${sr.description || ''}">${sr.description || ''}</td>
+             <td>${sr.status === 'Open'
+                  ? `<button class="btn btn-sm btn-update-sr" data-srid="${sr.request_id}">Update</button>
+                     <button class="btn btn-sm btn-close-sr" data-srid="${sr.request_id}">Close</button>`
+                  : ''}</td>
+           </tr>`).join('')}
+         </tbody>
+       </table>
+       <div class="mt-2 text-right"><button id="newSRBtn" class="btn btn-primary">Create New Service Request</button></div>`
+    : `<p>No service requests found.</p>
+       <div class="mt-2 text-right"><button id="newSRBtn" class="btn btn-primary">Create New Service Request</button></div>`;
 
   div.innerHTML = html;
   bindActionHandlers(data);
 }
 
-// DOM ready logic unchanged...
+// DOM Ready
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('currentDate').textContent = new Date().toLocaleString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  document.getElementById('currentDate').textContent =
+    new Date().toLocaleString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
   const searchBtn = document.getElementById('searchBtn');
   const searchField = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
@@ -241,5 +248,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try { const data = await fetchCustomer(val,type); await showCustomer(data); }
     catch { detailsDiv.style.display='none'; showMessage('Error fetching data.', 'danger'); }
   };
-  $(document).on('click', '#newSRBtn', () => { if (!latestCustomer){ showMessage('Load a customer first.','danger'); return; } $("#newSRModal").modal("show"); });
+  $(document).on('click', '#newSRBtn', () => {
+    if (!latestCustomer){ showMessage('Load a customer first.','danger'); return; }
+    $("#newSRModal").modal("show");
+  });
 });
