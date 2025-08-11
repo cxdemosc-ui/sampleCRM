@@ -5,6 +5,7 @@
   <title>SampleCRM Portal</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+  <!-- Bootstrap CSS -->
   <link rel="stylesheet"
         href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
   <link rel="stylesheet" href="style.css" />
@@ -32,9 +33,11 @@
 
   <!-- Messages -->
   <div id="messageBar" class="alert mt-3" style="display:none;"></div>
+
+  <!-- Customer details container -->
   <div id="customer-details" style="display:none;"></div>
 
-  <!-- Service Request Modal -->
+  <!-- New Service Request Modal -->
   <div class="modal fade" id="newSRModal" tabindex="-1" role="dialog" aria-labelledby="newSRLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
       <form id="newSRForm" class="modal-content">
@@ -66,11 +69,41 @@
       </form>
     </div>
   </div>
-</div>
 
-<!-- Dependencies -->
+  <!-- Edit / Update / Close Service Request Modal -->
+  <div class="modal fade" id="editSRModal" tabindex="-1" role="dialog" aria-labelledby="editSRModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <form id="editSRForm" class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editSRModalLabel">Update Service Request</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <div id="editSRAlert" style="display:none" class="alert"></div>
+          <input type="hidden" id="editSRAction" />
+          <div class="form-group">
+            <label for="editSRType">Service Request Type</label>
+            <input type="text" id="editSRType" class="form-control" readonly />
+          </div>
+          <div class="form-group">
+            <label for="editSRDesc">Description</label>
+            <textarea id="editSRDesc" class="form-control" rows="3" required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Submit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div><!-- end crm-app -->
+
+<!-- JS deps -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+<!-- Main script -->
 <script src="script.js?v=20250812"></script>
 </body>
 </html>
