@@ -5,33 +5,31 @@
   <title>SampleCRM Portal</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Bootstrap & Optional Theme -->
+  <!-- Bootstrap CSS -->
   <link rel="stylesheet"
         href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
-  
-  <!-- Custom Styles -->
-  <link rel="stylesheet" href="style.css" />
 
+  <!-- Custom Styles -->
   <style>
-    /* Inline style additions for visual clarity */
     body { background-color: #f4f7fb; }
     .crm-icon { height: 48px; margin-right: 10px; }
     .card-actions button { margin: 2px 4px 2px 0; }
     .bg-light { background-color: #f8f9fa!important; }
-    #customer-details h6 { border-bottom: 2px solid #007bff; padding-bottom: 4px; margin-top: 1.5rem; }
+    #customer-details h6 {
+      border-bottom: 2px solid #007bff;
+      padding-bottom: 4px;
+      margin-top: 1.5rem;
+    }
   </style>
 </head>
 
 <body>
   <div class="container mt-4" id="crm-app">
     
-    <!-- === Header / Branding === -->
+    <!-- === Branding Header === -->
     <div class="d-flex align-items-center mb-3">
-      <img 
-        src="https://raw.githubusercontent.com/cxdemosc-ui/sampleCRM/main/CRM_sample_image.png" 
-        alt="SampleCRM Logo" 
-        class="crm-icon" 
-      />
+      <img src="https://raw.githubusercontent.com/cxdemosc-ui/sampleCRM/main/CRM_sample_image.png" 
+           alt="SampleCRM Logo" class="crm-icon" />
       <h1 class="mb-0">Custom CRM</h1>
       <div id="currentDate" class="ml-auto text-muted small"></div>
     </div>
@@ -41,27 +39,21 @@
       <label for="searchMobile" class="font-weight-bold">
         Enter Mobile Number, Account Number, or Email:
       </label>
-      <input 
-        type="text" 
-        id="searchMobile" 
-        placeholder="Mobile Number, Account Number, or Email" 
-        class="form-control" 
-        autocomplete="off"
-      />
-      <button id="searchBtn" class="btn btn-primary mt-2">
-        Search
-      </button>
+      <input type="text" id="searchMobile"
+             placeholder="Mobile Number, Account Number, or Email"
+             class="form-control" autocomplete="off" />
+      <button id="searchBtn" class="btn btn-primary mt-2">Search</button>
     </div>
 
-    <!-- === Message Bar for alerts === -->
+    <!-- === Messages / Alerts === -->
     <div id="messageBar" class="alert mt-3" style="display:none;"></div>
 
-    <!-- === Customer Details Render Area === -->
+    <!-- === Dynamic Customer Info === -->
     <div id="customer-details" style="display:none;"></div>
     
   </div> <!-- /container -->
 
-  <!-- === Main Script === -->
+  <!-- Main Logic -->
   <script src="script.js?v=20250811"></script>
 </body>
 </html>
