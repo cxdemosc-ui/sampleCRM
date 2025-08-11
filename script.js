@@ -48,6 +48,7 @@ async function fetchCustomer(identifier, searchType = 'auto') {
   if (!response.ok) throw new Error(`API Error: ${response.status}`);
   return response.json();
 }
+
 async function sendActionToWebexConnect(payload) {
   const resp = await fetch(ENDPOINTS.webexAction, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -84,16 +85,13 @@ function bindActionHandlers(data) {
         const isBlock = btn.classList.contains('btn-block-card');
         const isUnblock = btn.classList.contains('btn-unblock-card');
         const isReissue = btn.classList.contains('btn-reissue-card');
-
         if (isBlock || isUnblock || isReissue) {
           const actionLabel = isBlock ? 'Block' : isUnblock ? 'UnBlock' : 'Reissue';
           if (!confirm(`${actionLabel} this ${typeLabel} card?\nCard Number: ${cardNo}\nStatus: ${status}`)) return;
         }
-
         const actionType = isBlock ? 'Block' : isUnblock ? 'UnBlock' :
                            isReissue ? 'Reissue' :
                            btn.classList.contains('btn-mark-lost') ? 'Lost' : 'Dispute';
-
         const payload = {
           custPhone: data.mobile_no,
           custPhone2: data.mobile_no2,
@@ -105,14 +103,13 @@ function bindActionHandlers(data) {
           serviceRequestType: "",
           serviceDescription: ""
         };
-
         showMessage(`${actionType} request in progress...`, 'info');
         const result = await sendActionToWebexConnect(payload);
         if (result.status === 'OK') {
           if (isBlock) { btn.textContent = 'UnBlock'; btn.classList.replace('btn-block-card','btn-unblock-card'); btn.classList.replace('btn-danger','btn-success'); }
           else if (isUnblock) { btn.textContent = 'Block'; btn.classList.replace('btn-unblock-card','btn-block-card'); btn.classList.replace('btn-success','btn-danger'); }
           else if (isReissue) { btn.closest('.card-section').querySelectorAll('button').forEach(b => b.disabled = true); }
-          showMessage(`${actionType} request sent successfully for card ending ${cardNo.slice(-4)}.`, 'success');
+          showMessage(`${actionType} request sent successfully for card ending ${cardNo.slice(-4)}.`,'success');
         } else showMessage(`Request sent but not confirmed.`, 'warning');
       };
     });
@@ -126,19 +123,19 @@ async function showCustomer(data) {
     showMessage(data?.error ?? 'No customer found.','danger');
     return;
   }
-  document.getElementById('messageBar').style.display = 'none';
   detailsDiv.style.display = 'block';
+  document.getElementById('messageBar').style.display = 'none';
 
   let html = `
     <div class="card p-3 mb-3 bg-light border-primary">
       <div class="row">
-        <div class="col-md-6">
+        <div class="col-md-6 profile-left">
           <h5 class="text-primary">${data.customer_first_name} ${data.customer_last_name}</h5>
           <div><strong>Mobile:</strong> ${data.mobile_no}</div>
           <div><strong>Alt Mobile:</strong> ${data.mobile_no2}</div>
           <div><strong>Email:</strong> ${data.email}</div>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-6 profile-right">
           <div><strong>Address:</strong> ${data.customer_address || 'N/A'}</div>
           <div><strong>City:</strong> ${data.customer_city || 'N/A'}</div>
           <div><strong>Account Number:</strong> ${data.account_number}</div>
@@ -148,13 +145,12 @@ async function showCustomer(data) {
     </div>
   `;
 
-  // Debit card (with account/recent transactions)
   html += `<h6 class="text-primary">Debit Card</h6>`;
   html += (data.debit_cards || []).map(c =>
     `<div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} - ${c.status}
       ${(data.recent_transactions || []).length
-        ? `<table class="table table-sm table-bordered mb-2">
+        ? `<table class="table table-sm table-bordered">
             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
             <tbody>
               ${data.recent_transactions.map(tx => `
@@ -167,16 +163,15 @@ async function showCustomer(data) {
             </tbody>
           </table>`
         : '<p>No account/debit card transactions found.</p>'}
-      <div class="card-actions mt-1">${renderCardActions(c,"Debit")}</div>
+      <div class="card-actions">${renderCardActions(c,"Debit")}</div>
     </div>`).join('');
 
-  // Credit card(s)
   html += `<h6 class="text-primary">Credit Card</h6>`;
   html += (data.credit_cards || []).map(c =>
     `<div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} - ${c.status}
       ${(c.transactions && c.transactions.length)
-        ? `<table class="table table-sm table-bordered mb-2">
+        ? `<table class="table table-sm table-bordered">
             <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
             <tbody>
               ${c.transactions.map(tx => `
@@ -189,10 +184,9 @@ async function showCustomer(data) {
             </tbody>
           </table>`
         : '<p>No credit card transactions found.</p>'}
-      <div class="card-actions mt-1">${renderCardActions(c,"Credit")}</div>
+      <div class="card-actions">${renderCardActions(c,"Credit")}</div>
     </div>`).join('');
 
-  // Service requests
   html += `<h6 class="text-primary">Service Requests</h6>`;
   html += (data.service_requests || []).length
     ? `<table class="table table-sm table-bordered">
@@ -205,7 +199,7 @@ async function showCustomer(data) {
               <td>${sr.status}</td>
               <td>${sr.raised_date}</td>
               <td>${sr.resolution_date || '-'}</td>
-              <td>${sr.description || ''}</td>
+              <td class="sr-desc" title="${sr.description || ''}">${sr.description || ''}</td>
               <td>
                 ${sr.status === 'Open'
                   ? `<button class="btn btn-sm btn-info btn-update-sr" data-srid="${sr.request_id}">Update</button>
