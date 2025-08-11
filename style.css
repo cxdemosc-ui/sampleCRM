@@ -1,34 +1,13 @@
 body {
   background: #f9fafb;
   font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 0;
 }
-.wide-container {
-  max-width: 1200px; /* wider */
-  margin: auto;
-  padding: 0 15px;
-}
+.wide-container { max-width: 1200px; margin: auto; padding: 0 15px; }
 .crm-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: #fff;
-  border: 2px solid #e0e0e0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  margin-right: 15px;
+  width: 60px; height: 60px; border-radius: 50%; object-fit: cover;
+  background: #fff; border: 2px solid #e0e0e0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-right: 15px;
 }
-.readonly-field {
-  background-color: #e9ecef !important;
-  border: 1px solid #ced4da;
-  padding: 7px 10px;
-  border-radius: 4px;
-}
-.btn-action-group > button { margin-right: 8px; margin-bottom: 4px; }
-@media (max-width: 767px) {
-  .btn-action-group > button { display: block; width: 100%; margin-bottom: 8px; }
-}
+.readonly-field { background-color: #e9ecef !important; border: 1px solid #ced4da; padding: 7px 10px; border-radius: 4px; }
 #messageBar { font-weight: 500; }
 #currentDate { font-size: 0.9em; color: #6c757d; }
 #customer-details h6 { border-bottom: 2px solid #007bff; padding-bottom: 4px; margin-top: 1.5rem; }
@@ -36,25 +15,17 @@ body {
 .card-section table { margin-bottom: 0.75rem; }
 .card-actions { margin-top: 0.5rem; text-align: right; }
 .table th, .table td { vertical-align: middle; }
-.table td.sr-desc {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 500px; /* wider for single line */
-}
+.table td.sr-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px; }
+
+/* Card status badges */
 .badge-status {
-  font-size: 1em;
-  padding: 2px 14px;
-  border-radius: 15px;
-  font-weight: 500;
-  letter-spacing: .02em;
-  vertical-align: middle;
+  font-size: 1em; padding: 2px 14px; border-radius: 15px; font-weight: 500; letter-spacing: .02em;
 }
 .badge-status.active { background: #e8f9ed; color: #249e54; border: 1px solid #b4efca; }
 .badge-status.blocked { background: #fde8e7; color: #d03c27; border: 1px solid #f4b0a6; }
 .badge-status.reissued { background: #fff6e2; color: #e5860b; border: 1px solid #ffe1a3; }
 
-/* Modern pastel buttons for debit/credit card actions */
+/* Modern pastel buttons for Debit/Credit actions */
 .btn-block-card      { background: #fde8e7; color: #d03c27; border: 1px solid #f4b0a6; }
 .btn-block-card:hover    { background: #fbd5d0; color: #b7321d; }
 .btn-reissue-card    { background: #fff6e2; color: #e5860b; border: 1px solid #ffe1a3; }
@@ -63,11 +34,19 @@ body {
 .btn-mark-lost:hover { background: #d9ddfa; color: #4046a3; }
 .btn-dispute         { background: #e6f3fd; color: #2186c7; border: 1px solid #9ecbed; }
 .btn-dispute:hover   { background: #cdeafd; color: #1462a6; }
-
 .btn-unblock-card    { background: #e8f9ed; color: #249e54; border: 1px solid #b4efca; }
 .btn-unblock-card:hover { background: #cff2de; color: #166833; }
 
-.btn-info, .btn-danger, .btn-secondary, .btn-warning, .btn-primary {
-  /* override to ensure pastel background on color buttons is never bootstrap dark */
-  border-radius: 6px !important;
+/* Service request action buttons pastel theme */
+.btn-update-sr {
+  background: #e6f3fd; color: #2186c7; border: 1px solid #9ecbed; border-radius: 6px;
+}
+.btn-update-sr:hover {
+  background: #cdeafd; color: #1462a6;
+}
+.btn-close-sr {
+  background: #fde8e7; color: #d03c27; border: 1px solid #f4b0a6; border-radius: 6px;
+}
+.btn-close-sr:hover {
+  background: #fbd5d0; color: #b7321d;
 }
