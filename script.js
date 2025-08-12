@@ -1,9 +1,9 @@
 /*******************************************************
- * SampleCRM Frontend Script (2025-08, Final Stable Build + Fixes)
- * - Fixes Debit Card view to use only card-specific transactions
- * - Adds dedicated Savings Account Transactions section
- * - Restores full Service Requests rendering
- * - Unified refresh after all actions (~900ms delay)
+ * SampleCRM Frontend Script (2025-08, Revised Build)
+ * - Shows Savings transactions (null => "Savings")
+ * - Section order: Savings → Debit → Credit → Service Requests
+ * - Consistent column widths via .crm-table
+ * - All existing functions/actions preserved
  *******************************************************/
 
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
@@ -26,13 +26,13 @@ function showMessage(msg, type='info') {
   }
 }
 function maskCard(c) { return (!c || c.length < 4) ? '' : '**** **** **** ' + c.slice(-4); }
-function formatMoney(a) { const n = Number(a); return isNaN(n) ? '0.00' : n.toLocaleString(undefined, {minimumFractionDigits:2}); }
+function formatMoney(a) { const n = Number(a); return isNaN(n) ? '0.00' : n.toLocaleString(undefined, { minimumFractionDigits:2 }); }
 
-// ✅ Revised date formatting function
+// Date formatting to DD-MM-YY HH:mm
 function formatDateDMYHM(dt) {
   if (!dt) return '';
-  let safe = String(dt).trim().replace(' ', 'T');  // ensure ISO 8601 "YYYY-MM-DDTHH:mm:ss"
-  safe = safe.split('.')[0]; // strip microseconds if present
+  let safe = String(dt).trim().replace(' ', 'T');
+  safe = safe.split('.')[0];
   const d = new Date(safe);
   if (isNaN(d)) return '';
   return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getFullYear()).slice(-2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -61,6 +61,7 @@ async function fetchCustomer(identifier, searchType='auto') {
   if (!r.ok) throw new Error(`API Error: ${r.status}`);
   return r.json();
 }
+
 async function sendAction(payload) {
   const r = await fetch(ENDPOINTS.webexAction, {
     method: 'POST',
@@ -158,13 +159,29 @@ async function showCustomer(data) {
     </div>
   </div>`;
 
+  // Savings Account section FIRST
+  const savingsTxs = (data.recent_transactions || []).filter(
+    tx => !tx.transaction_medium || tx.transaction_medium.toLowerCase() === 'savings'
+  );
+  html += `<h6 class="text-primary">Savings Account Transactions</h6>`;
+  html += savingsTxs.length
+    ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+       <tbody>${savingsTxs.map(tx => `
+         <tr>
+           <td>${formatDateDMYHM(tx.transaction_date)}</td>
+           <td>${tx.transaction_type}</td>
+           <td>${formatMoney(tx.amount)}</td>
+           <td>${tx.reference_note || ''}</td>
+         </tr>`).join('')}</tbody></table>`
+    : `<p>No savings account transactions found.</p>`;
+
   // Debit Card section
   html += `<h6 class="text-primary">Debit Card</h6>`;
   html += (data.debit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
       ${(c.transactions && c.transactions.length)
-        ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+        ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
            <tbody>${c.transactions.map(tx => `
              <tr>
                <td>${formatDateDMYHM(tx.transaction_date)}</td>
@@ -182,7 +199,7 @@ async function showCustomer(data) {
     <div class="border rounded p-2 mb-2 bg-white card-section">
       ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
       ${(c.transactions && c.transactions.length)
-        ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+        ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
            <tbody>${c.transactions.map(tx => `
              <tr>
                <td>${formatDateDMYHM(tx.transaction_date)}</td>
@@ -194,26 +211,10 @@ async function showCustomer(data) {
       <div class="card-actions">${renderCardActions(c, "Credit")}</div>
     </div>`).join('');
 
-  // Savings Account section
-  const savingsTxs = (data.recent_transactions || []).filter(
-    tx => tx.transaction_medium && tx.transaction_medium.toLowerCase() === 'savings'
-  );
-  html += `<h6 class="text-primary">Savings Account Transactions</h6>`;
-  html += savingsTxs.length
-    ? `<table class="table table-sm table-bordered"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-       <tbody>${savingsTxs.map(tx => `
-         <tr>
-           <td>${formatDateDMYHM(tx.transaction_date)}</td>
-           <td>${tx.transaction_type}</td>
-           <td>${formatMoney(tx.amount)}</td>
-           <td>${tx.reference_note || ''}</td>
-         </tr>`).join('')}</tbody></table>`
-    : `<p>No savings account transactions found.</p>`;
-
   // Service Requests
   html += `<h6 class="text-primary">Service Requests</h6>`;
   html += (data.service_requests || []).length
-    ? `<table class="table table-sm table-bordered">
+    ? `<table class="table table-sm table-bordered crm-table">
          <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Raised</th><th>Resolution</th><th>Description</th><th>Actions</th></tr></thead>
          <tbody>${data.service_requests.map(sr => `
            <tr>
