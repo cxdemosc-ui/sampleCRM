@@ -240,6 +240,7 @@ async function showCustomer(data) {
 }
 // Trying to make URL search working 
 document.addEventListener('DOMContentLoaded', () => {
+  // 1. Show current date/time in header
   document.getElementById('currentDate').textContent =
     new Date().toLocaleString('en-GB', {
       weekday: 'long',
@@ -250,11 +251,12 @@ document.addEventListener('DOMContentLoaded', () => {
       minute: '2-digit'
     });
 
+  // 2. Get DOM elements
   const searchBtn = document.getElementById('searchBtn');
   const searchField = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
 
-  // Allow pressing Enter to trigger search
+  // 3. Enter key triggers search
   searchField.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -262,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Main search click handler - works for manual clicks AND auto-load
+  // 4. Main search click handler
   searchBtn.onclick = async () => {
     const val = searchField.value.trim();
     if (!val) {
@@ -270,9 +272,14 @@ document.addEventListener('DOMContentLoaded', () => {
       detailsDiv.style.display = 'none';
       return;
     }
+
     showMessage('Loading customer info...', 'info');
     detailsDiv.style.display = 'none';
-    let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
+
+    let type = val.includes('@')
+      ? 'email'
+      : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
+
     try {
       const data = await fetchCustomer(val, type);
       await showCustomer(data);
@@ -282,18 +289,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // --- AUTO-LOAD SEARCH FROM URL PARAM ---
-  // Runs AFTER click handler is in place
+  // 5. Auto-load from URL param (case-sensitive)
   const params = new URLSearchParams(window.location.search);
   const paramVal = params.get('mobileNo');
   if (paramVal) {
-    const cleanVal = paramVal.trim();
-    searchField.value = cleanVal;
-    searchBtn.click(); // triggers the handler above
+    searchField.value = paramVal.trim();
+    searchBtn.click(); // Trigger search now that handler is bound
   }
-  // --- END AUTO-LOAD ---
 
-  // Bind "Create New SR" button
+  // 6. Bind "Create New Service Request" button
   $(document).on('click', '#newSRBtn', () => {
     if (!latestCustomer) {
       showMessage('Load a customer first.', 'danger');
@@ -302,6 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $("#newSRModal").modal("show");
   });
 });
+
 
 // --
 // document.addEventListener('DOMContentLoaded', () => {
