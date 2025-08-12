@@ -241,10 +241,81 @@ async function showCustomer(data) {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('currentDate').textContent =
-    new Date().toLocaleString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    new Date().toLocaleString('en-GB', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
   const searchBtn = document.getElementById('searchBtn');
   const searchField = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
+
+  // Allow pressing Enter to trigger search
+  searchField.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchBtn.click();
+    }
+  });
+
+  // Main search click handler
+  searchBtn.onclick = async () => {
+    const val = searchField.value.trim();
+    if (!val) {
+      showMessage('Please enter a mobile, account, or email.', 'warning');
+      detailsDiv.style.display = 'none';
+      return;
+    }
+    showMessage('Loading customer info...', 'info');
+    detailsDiv.style.display = 'none';
+    let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
+    try {
+      const data = await fetchCustomer(val, type);
+      await showCustomer(data);
+    } catch {
+      detailsDiv.style.display = 'none';
+      showMessage('Error fetching data.', 'danger');
+    }
+  };
+
+  // --- AUTO-LOAD SEARCH FROM URL PARAM ---
+  // This block checks the page URL for a query parameter named "mobileNo"
+  // and, if found, automatically populates the search box and triggers the search.
+  // Supported formats:
+  //   ?mobileNo=6589485304
+  //   ?mobileNo=19728899106
+  //   ?mobileNo=wxccrtmsdemo@gmail.com
+  // The camelCase "mobileNo" is case-sensitive; other variations won't match.
+  const params = new URLSearchParams(window.location.search);
+  const paramVal = params.get('mobileNo');
+  if (paramVal) {
+    const cleanVal = paramVal.trim();   // cleanup
+    searchField.value = cleanVal;       // fill field
+    searchBtn.click();                  // trigger search now that handler is ready
+  }
+  // --- END AUTO-LOAD ---
+
+  // Bind "Create New SR" button
+  $(document).on('click', '#newSRBtn', () => {
+    if (!latestCustomer) {
+      showMessage('Load a customer first.', 'danger');
+      return;
+    }
+    $("#newSRModal").modal("show");
+  });
+});
+
+// --
+// document.addEventListener('DOMContentLoaded', () => {
+ // document.getElementById('currentDate').textContent =
+ //   new Date().toLocaleString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ // const searchBtn = document.getElementById('searchBtn');
+ // const searchField = document.getElementById('searchMobile');
+ // const detailsDiv = document.getElementById('customer-details');
  
 // --- AUTO-LOAD SEARCH FROM URL PARAM ---
 // This block checks the page URL for a query parameter named "mobileNo"
@@ -254,35 +325,35 @@ document.addEventListener('DOMContentLoaded', () => {
 //   ?mobileNo=19728899106
 //   ?mobileNo=wxccrtmsdemo@gmail.com
 // The camelCase "mobileNo" is case-sensitive; other variations won't match.
-const params = new URLSearchParams(window.location.search);
+//const params = new URLSearchParams(window.location.search);
 
 // Read the ?mobileNo parameter value (null if missing)
-const paramVal = params.get('mobileNo');
+// const paramVal = params.get('mobileNo');
 
-if (paramVal) {
+// if (paramVal) {
 // Remove any accidental leading/trailing spaces from the value
-  const cleanVal = paramVal.trim();
+//  const cleanVal = paramVal.trim();
 
 // Set the cleaned value into the search input field
-  searchField.value = cleanVal;
+//  searchField.value = cleanVal;
 
 // Programmatically click the Search button to fetch customer data immediately
-  searchBtn.click();
+//  searchBtn.click();
 }
 // --- END AUTO-LOAD ---
 
   
-  searchField.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); searchBtn.click(); } });
-  searchBtn.onclick = async () => {
-    const val = searchField.value.trim();
-    if (!val) { showMessage('Please enter a mobile, account, or email.', 'warning'); detailsDiv.style.display='none'; return; }
-    showMessage('Loading customer info...', 'info'); detailsDiv.style.display='none';
-    let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
-    try { const data = await fetchCustomer(val,type); await showCustomer(data); }
-    catch { detailsDiv.style.display='none'; showMessage('Error fetching data.', 'danger'); }
-  };
-  $(document).on('click', '#newSRBtn', () => {
-    if (!latestCustomer){ showMessage('Load a customer first.','danger'); return; }
-    $("#newSRModal").modal("show");
-  });
-});
+//  searchField.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); searchBtn.click(); } });
+//  searchBtn.onclick = async () => {
+//    const val = searchField.value.trim();
+//    if (!val) { showMessage('Please enter a mobile, account, or email.', 'warning'); detailsDiv.style.display='none'; return; }
+//    showMessage('Loading customer info...', 'info'); detailsDiv.style.display='none';
+//    let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
+//    try { const data = await fetchCustomer(val,type); await showCustomer(data); }
+//    catch { detailsDiv.style.display='none'; showMessage('Error fetching data.', 'danger'); }
+//  };
+//  $(document).on('click', '#newSRBtn', () => {
+//    if (!latestCustomer){ showMessage('Load a customer first.','danger'); return; }
+//    $("#newSRModal").modal("show");
+//  });
+//});
