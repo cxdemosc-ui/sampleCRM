@@ -338,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Programmatically click the Search button to fetch customer data immediately
 //  searchBtn.click();
-}
+//}
 // --- END AUTO-LOAD ---
 
   
