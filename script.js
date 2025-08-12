@@ -245,7 +245,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchBtn = document.getElementById('searchBtn');
   const searchField = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
+ 
+// --- AUTO-LOAD SEARCH FROM URL PARAM ---
+// This block checks the page URL for a query parameter named "mobileNo"
+// and, if found, automatically populates the search box and triggers the search.
+// Supported formats: 
+//   ?mobileNo=6589485304
+//   ?mobileNo=19728899106
+//   ?mobileNo=wxccrtmsdemo@gmail.com
+// The camelCase "mobileNo" is case-sensitive; other variations won't match.
+const params = new URLSearchParams(window.location.search);
 
+// Read the ?mobileNo parameter value (null if missing)
+const paramVal = params.get('mobileNo');
+
+if (paramVal) {
+// Remove any accidental leading/trailing spaces from the value
+  const cleanVal = paramVal.trim();
+
+// Set the cleaned value into the search input field
+  searchField.value = cleanVal;
+
+// Programmatically click the Search button to fetch customer data immediately
+  searchBtn.click();
+}
+// --- END AUTO-LOAD ---
+
+  
   searchField.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); searchBtn.click(); } });
   searchBtn.onclick = async () => {
     const val = searchField.value.trim();
