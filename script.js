@@ -238,7 +238,7 @@ async function showCustomer(data) {
   div.innerHTML = html;
   bindActionHandlers(data);
 }
-
+// Trying to make URL search working 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('currentDate').textContent =
     new Date().toLocaleString('en-GB', {
@@ -262,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Main search click handler
+  // Main search click handler - works for manual clicks AND auto-load
   searchBtn.onclick = async () => {
     const val = searchField.value.trim();
     if (!val) {
@@ -283,19 +283,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // --- AUTO-LOAD SEARCH FROM URL PARAM ---
-  // This block checks the page URL for a query parameter named "mobileNo"
-  // and, if found, automatically populates the search box and triggers the search.
-  // Supported formats:
-  //   ?mobileNo=6589485304
-  //   ?mobileNo=19728899106
-  //   ?mobileNo=wxccrtmsdemo@gmail.com
-  // The camelCase "mobileNo" is case-sensitive; other variations won't match.
+  // Runs AFTER click handler is in place
   const params = new URLSearchParams(window.location.search);
   const paramVal = params.get('mobileNo');
   if (paramVal) {
-    const cleanVal = paramVal.trim();   // cleanup
-    searchField.value = cleanVal;       // fill field
-    searchBtn.click();                  // trigger search now that handler is ready
+    const cleanVal = paramVal.trim();
+    searchField.value = cleanVal;
+    searchBtn.click(); // triggers the handler above
   }
   // --- END AUTO-LOAD ---
 
