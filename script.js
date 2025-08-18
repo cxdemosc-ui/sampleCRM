@@ -1,10 +1,12 @@
 /*******************************************************
- * SampleCRM Frontend Script (2025-08, Revised Build)
+ * SampleCRM Frontend Script (2025-08, Corrected Build)
  * - Shows Savings transactions (null => "Savings")
  * - Section order: Savings → Debit → Credit → Service Requests
  * - Consistent column widths via .crm-table
- * - Preserves all existing functions/actions
- * - Ensures refresh after card/service actions
+ * - All existing functions/actions preserved
+ * - Fixes:
+ *    1. Search button now works correctly
+ *    2. Refresh after card actions preserves last search
  *******************************************************/
 
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
@@ -19,11 +21,12 @@ const ENDPOINTS = {
 
 let latestCustomer = null;
 
-// Preserve last search details for refresh after any action
+// Preserve last search details for refresh
 let lastSearchVal = '';
 let lastSearchType = '';
 
-// ------------------------ Helper Functions ------------------------
+// ----------------- Utility Functions -----------------
+
 function showMessage(msg, type='info') {
   const bar = document.getElementById('messageBar');
   if (bar) {
@@ -33,19 +36,20 @@ function showMessage(msg, type='info') {
   }
 }
 
-function maskCard(c) {
-  return (!c || c.length < 4) ? '' : '**** **** **** ' + c.slice(-4);
+function maskCard(c) { 
+  return (!c || c.length < 4) ? '' : '**** **** **** ' + c.slice(-4); 
 }
 
-function formatMoney(a) {
-  const n = Number(a);
-  return isNaN(n) ? '0.00' : n.toLocaleString(undefined, { minimumFractionDigits:2 });
+function formatMoney(a) { 
+  const n = Number(a); 
+  return isNaN(n) ? '0.00' : n.toLocaleString(undefined, { minimumFractionDigits:2 }); 
 }
 
-// Date formatting: DD-MM-YY HH:mm
+// Date formatting to DD-MM-YY HH:mm
 function formatDateDMYHM(dt) {
   if (!dt) return '';
-  let safe = String(dt).trim().replace(' ', 'T').split('.')[0];
+  let safe = String(dt).trim().replace(' ', 'T');
+  safe = safe.split('.')[0];
   const d = new Date(safe);
   if (isNaN(d)) return '';
   return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getFullYear()).slice(-2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -60,7 +64,8 @@ function cardStatusBadge(status) {
   return `<span class="badge badge-status">${status}</span>`;
 }
 
-// ------------------------ API Calls ------------------------
+// ----------------- API Functions -----------------
+
 async function fetchCustomer(identifier, searchType='auto') {
   const body = { p_mobile_no: null, p_account_number: null, p_email: null };
   if (searchType === 'email') body.p_email = identifier;
@@ -85,7 +90,8 @@ async function sendAction(payload) {
   try { return await r.json(); } catch { return null; }
 }
 
-// ------------------------ UI & Actions ------------------------
+// ----------------- Card & Service Request Handlers -----------------
+
 function renderCardActions(card, type) {
   const status = (card.status || '').toLowerCase();
   let actions = status !== 'blocked'
@@ -98,16 +104,14 @@ function renderCardActions(card, type) {
   return actions;
 }
 
-// Refresh latest customer data (after any action)
 function refreshCustomerData() {
   if (lastSearchVal) {
     fetchCustomer(lastSearchVal, lastSearchType)
       .then(showCustomer)
-      .catch(()=> showMessage('Error refreshing data.', 'danger'));
+      .catch(()=>{ showMessage('Error refreshing data.', 'danger'); });
   }
 }
 
-// Bind all action buttons and service request forms
 function bindActionHandlers(data) {
   document.querySelectorAll('.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
     .forEach(btn => {
@@ -117,40 +121,26 @@ function bindActionHandlers(data) {
                          btn.classList.contains('btn-unblock-card') ? 'UnBlock' :
                          btn.classList.contains('btn-reissue-card') ? 'Reissue' :
                          btn.classList.contains('btn-mark-lost') ? 'Lost' : 'Dispute';
-        if (['Block','UnBlock','Reissue','Lost'].includes(actionType) &&
-            !confirm(`${actionType} this ${typeLabel} card?\nCard Number: ${cardNo.slice(-4)}`)) return;
-
-        const payload = {
-          custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'',
-          custCard:cardNo, cardType:typeLabel, custEmail:data.email, custAction:actionType,
-          serviceRequestType:"", serviceDescription:""
-        };
-
+        if (['Block','UnBlock','Reissue','Lost'].includes(actionType) && !confirm(`${actionType} this ${typeLabel} card?\nCard Number: ${cardNo.slice(-4)}`)) return;
+        const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:cardNo, cardType:typeLabel, custEmail:data.email, custAction:actionType, serviceRequestType:"", serviceDescription:"" };
         showMessage(`${actionType} request in progress...`, 'info');
         await sendAction(payload);
-        refreshCustomerData(); // refresh immediately after action
+        setTimeout(refreshCustomerData, 900); // refresh latest data
       };
     });
 
-  // New Service Request Form
+  // New Service Request form
   $("#newSRForm").off("submit").on("submit", async e => {
     e.preventDefault();
     const srType = $("#srType").val().trim(), srDesc = $("#srDesc").val().trim();
     if (!srType || !srDesc) return $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required.");
-
-    const payload = {
-      custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'',
-      custCard:"", cardType:"", custEmail:data.email, custAction:"NewRequest",
-      serviceRequestType:srType, serviceDescription:srDesc
-    };
-
+    const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:"", cardType:"", custEmail:data.email, custAction:"NewRequest", serviceRequestType:srType, serviceDescription:srDesc };
     $("#newSRAlert").removeClass().addClass('alert alert-info').show().text("Creating Service Request...");
     await sendAction(payload);
-    $("#newSRModal").modal('hide');
-    refreshCustomerData();
+    setTimeout(()=> { $("#newSRModal").modal('hide'); refreshCustomerData(); }, 900);
   });
 
-  // Update / Close Service Requests
+  // Edit/Close Service Request buttons
   $(document).off("click", ".btn-update-sr, .btn-close-sr").on("click", ".btn-update-sr, .btn-close-sr", function() {
     const isUpdate = $(this).hasClass("btn-update-sr");
     const row = $(this).closest("tr");
@@ -162,25 +152,20 @@ function bindActionHandlers(data) {
     $("#editSRModal").modal("show");
   });
 
+  // Submit Edit/Close Service Request
   $("#editSRForm").off("submit").on("submit", async e => {
     e.preventDefault();
     const action = $("#editSRAction").val(), srType=$("#editSRType").val(), srDesc=$("#editSRDesc").val().trim();
     if (!srDesc) return $("#editSRAlert").show().addClass('alert-danger').text("Description is required.");
-
-    const payload = {
-      custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'',
-      custCard:"", cardType:"", custEmail:data.email, custAction:action,
-      serviceRequestType:srType, serviceDescription:srDesc
-    };
-
+    const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:"", cardType:"", custEmail:data.email, custAction:action, serviceRequestType:srType, serviceDescription:srDesc };
     $("#editSRAlert").removeClass().addClass('alert alert-info').show().text(`${action} in progress...`);
     await sendAction(payload);
-    $("#editSRModal").modal('hide');
-    refreshCustomerData();
+    setTimeout(()=>{ $("#editSRModal").modal('hide'); refreshCustomerData(); }, 900);
   });
 }
 
-// Render customer and transactions/service requests
+// ----------------- Render Customer -----------------
+
 async function showCustomer(data) {
   latestCustomer = data;
   const div = document.getElementById('customer-details');
@@ -191,7 +176,6 @@ async function showCustomer(data) {
   div.style.display = 'block';
   document.getElementById('messageBar').style.display = 'none';
 
-  // Customer info header
   let html = `<div class="card p-3 mb-3 bg-light border-primary">
     <div class="row">
       <div class="col-md-6">
@@ -209,9 +193,10 @@ async function showCustomer(data) {
     </div>
   </div>`;
 
-  // ------------------------ Transactions ------------------------
-  // Savings
-  const savingsTxs = (data.recent_transactions || []).filter(tx => !tx.transaction_medium || tx.transaction_medium.toLowerCase() === 'savings');
+  // Savings Account section
+  const savingsTxs = (data.recent_transactions || []).filter(
+    tx => !tx.transaction_medium || tx.transaction_medium.toLowerCase() === 'savings'
+  );
   html += `<h6 class="text-primary">Savings Account Transactions</h6>`;
   html += savingsTxs.length
     ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
@@ -224,41 +209,25 @@ async function showCustomer(data) {
          </tr>`).join('')}</tbody></table>`
     : `<p>No savings account transactions found.</p>`;
 
-  // Debit Cards
-  html += `<h6 class="text-primary">Debit Card</h6>`;
-  html += (data.debit_cards || []).map(c => `
-    <div class="border rounded p-2 mb-2 bg-white card-section">
-      ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
-      ${(c.transactions && c.transactions.length)
-        ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-           <tbody>${c.transactions.map(tx => `
-             <tr>
-               <td>${formatDateDMYHM(tx.transaction_date)}</td>
-               <td>${tx.transaction_type}</td>
-               <td>${formatMoney(tx.amount)}</td>
-               <td>${tx.reference_note || ''}</td>
-             </tr>`).join('')}</tbody></table>`
-        : '<p>No debit card transactions found.</p>'}
-      <div class="card-actions">${renderCardActions(c, "Debit")}</div>
-    </div>`).join('');
-
-  // Credit Cards
-  html += `<h6 class="text-primary">Credit Card</h6>`;
-  html += (data.credit_cards || []).map(c => `
-    <div class="border rounded p-2 mb-2 bg-white card-section">
-      ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
-      ${(c.transactions && c.transactions.length)
-        ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
-           <tbody>${c.transactions.map(tx => `
-             <tr>
-               <td>${formatDateDMYHM(tx.transaction_date)}</td>
-               <td>${tx.transaction_type}</td>
-               <td>${formatMoney(tx.amount)}</td>
-               <td>${tx.reference_note || ''}</td>
-             </tr>`).join('')}</tbody></table>`
-        : '<p>No credit card transactions found.</p>'}
-      <div class="card-actions">${renderCardActions(c, "Credit")}</div>
-    </div>`).join('');
+  // Debit & Credit Cards
+  ['debit_cards','credit_cards'].forEach(cardType => {
+    html += `<h6 class="text-primary">${cardType === 'debit_cards' ? 'Debit Card' : 'Credit Card'}</h6>`;
+    html += (data[cardType] || []).map(c => `
+      <div class="border rounded p-2 mb-2 bg-white card-section">
+        ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
+        ${(c.transactions && c.transactions.length)
+          ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
+             <tbody>${c.transactions.map(tx => `
+               <tr>
+                 <td>${formatDateDMYHM(tx.transaction_date)}</td>
+                 <td>${tx.transaction_type}</td>
+                 <td>${formatMoney(tx.amount)}</td>
+                 <td>${tx.reference_note || ''}</td>
+               </tr>`).join('')}</tbody></table>`
+          : `<p>No ${cardType === 'debit_cards' ? 'debit' : 'credit'} card transactions found.</p>`}
+        <div class="card-actions">${renderCardActions(c, cardType === 'debit_cards' ? 'Debit' : 'Credit')}</div>
+      </div>`).join('');
+  });
 
   // Service Requests
   html += `<h6 class="text-primary">Service Requests</h6>`;
@@ -288,33 +257,77 @@ async function showCustomer(data) {
   bindActionHandlers(data);
 }
 
-// ------------------------ DOM Events ------------------------
+// ----------------- DOM Ready & Event Binding -----------------
+
 document.addEventListener('DOMContentLoaded', () => {
-  // Show current date/time
+  // Show current date/time in header
   const currentDateEl = document.getElementById('currentDate');
   if (currentDateEl) {
-    currentDateEl.textContent = new Date().toLocaleString('en-GB', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
+    currentDateEl.textContent =
+      new Date().toLocaleString('en-GB', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
   }
 
-  // Search elements
+  // DOM elements
   const searchBtn = document.getElementById('searchBtn');
   const searchField = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
 
   // Enter key triggers search
   searchField.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); searchBtn.click(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchBtn.click();
+    }
   });
 
-  // Main search click
+  // Main search click handler
   searchBtn.onclick = async () => {
     const val = searchField.value.trim();
-    if (!val) { showMessage('Please enter a mobile, account, or email.', 'warning'); detailsDiv.style.display = 'none'; return; }
+    if (!val) {
+      showMessage('Please enter a mobile, account, or email.', 'warning');
+      detailsDiv.style.display = 'none';
+      return;
+    }
 
     showMessage('Loading customer info...', 'info');
     detailsDiv.style.display = 'none';
 
-    let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? '
+    let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
+
+    lastSearchVal = val;     // preserve for refresh
+    lastSearchType = type;
+
+    try {
+      const data = await fetchCustomer(val, type);
+      await showCustomer(data);
+    } catch (err) {
+      console.error(err);
+      detailsDiv.style.display = 'none';
+      showMessage('Error fetching data.', 'danger');
+    }
+  };
+
+  // Auto-load from URL param ?mobileNo=
+  const params = new URLSearchParams(window.location.search);
+  const paramVal = params.get('mobileNo');
+  if (paramVal) {
+    searchField.value = paramVal.trim();
+    searchBtn.click();
+  }
+
+  // "Create New Service Request" button
+  $(document).on('click', '#newSRBtn', () => {
+    if (!latestCustomer) {
+      showMessage('Load a customer first.', 'danger');
+      return;
+    }
+    $("#newSRModal").modal("show");
+  });
+});
