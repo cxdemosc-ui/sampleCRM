@@ -1,10 +1,10 @@
 /*******************************************************
- * SampleCRM Frontend Script (2025-08, Fully Corrected)
- * - Preserves all original functions, URLs, and API keys
- * - Fixes refresh-after-action issue
- * - Search button and URL param search working
+ * SampleCRM Frontend Script (2025-08, Full Build)
+ * - Shows Savings transactions (null => "Savings")
  * - Section order: Savings → Debit → Credit → Service Requests
  * - Consistent column widths via .crm-table
+ * - All original functions/actions preserved
+ * - Fixed: dynamic form submit handlers and refresh after actions
  *******************************************************/
 
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
@@ -21,9 +21,7 @@ let latestCustomer = null;
 let lastSearchVal = '';
 let lastSearchType = '';
 
-/********************
- * Utility Functions
- ********************/
+/************* Utility functions *************/
 function showMessage(msg, type='info') {
   const bar = document.getElementById('messageBar');
   if (bar) {
@@ -32,19 +30,15 @@ function showMessage(msg, type='info') {
     bar.style.display = 'block';
   }
 }
-
 function maskCard(c) { return (!c || c.length < 4) ? '' : '**** **** **** ' + c.slice(-4); }
 function formatMoney(a) { const n = Number(a); return isNaN(n) ? '0.00' : n.toLocaleString(undefined, { minimumFractionDigits:2 }); }
-
 function formatDateDMYHM(dt) {
   if (!dt) return '';
-  let safe = String(dt).trim().replace(' ', 'T');
-  safe = safe.split('.')[0];
+  let safe = String(dt).trim().replace(' ', 'T').split('.')[0];
   const d = new Date(safe);
   if (isNaN(d)) return '';
   return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getFullYear()).slice(-2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
-
 function cardStatusBadge(status) {
   const lc = String(status).toLowerCase();
   if (lc === 'active') return `<span class="badge badge-status active">Active</span>`;
@@ -54,9 +48,7 @@ function cardStatusBadge(status) {
   return `<span class="badge badge-status">${status}</span>`;
 }
 
-/********************
- * Fetch Functions
- ********************/
+/************* API functions *************/
 async function fetchCustomer(identifier, searchType='auto') {
   const body = { p_mobile_no: null, p_account_number: null, p_email: null };
   if (searchType === 'email') body.p_email = identifier;
@@ -81,9 +73,7 @@ async function sendAction(payload) {
   try { return await r.json(); } catch { return null; }
 }
 
-/********************
- * Action Rendering
- ********************/
+/************* Rendering functions *************/
 function renderCardActions(card, type) {
   const status = (card.status || '').toLowerCase();
   let actions = status !== 'blocked'
@@ -96,22 +86,15 @@ function renderCardActions(card, type) {
   return actions;
 }
 
-/********************
- * Refresh Customer Data
- ********************/
 function refreshCustomerData() {
   if (lastSearchVal) {
-    fetchCustomer(lastSearchVal, lastSearchType)
-      .then(showCustomer)
-      .catch(()=> showMessage('Error refreshing data.', 'danger'));
+    fetchCustomer(lastSearchVal, lastSearchType).then(showCustomer).catch(()=>{
+      showMessage('Error refreshing data.', 'danger');
+    });
   }
 }
 
-/********************
- * Bind Action Handlers
- ********************/
 function bindActionHandlers(data) {
-  // Card Actions
   document.querySelectorAll('.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
     .forEach(btn => {
       btn.onclick = async () => {
@@ -128,18 +111,11 @@ function bindActionHandlers(data) {
       };
     });
 
-  // New Service Request
-  $("#newSRForm").off("submit").on("submit", async e => {
-    e.preventDefault();
-    const srType = $("#srType").val().trim(), srDesc = $("#srDesc").val().trim();
-    if (!srType || !srDesc) return $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required.");
-    const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:"", cardType:"", custEmail:data.email, custAction:"NewRequest", serviceRequestType:srType, serviceDescription:srDesc };
-    $("#newSRAlert").removeClass().addClass('alert alert-info').show().text("Creating Service Request...");
-    await sendAction(payload);
-    setTimeout(()=> { $("#newSRModal").modal('hide'); refreshCustomerData(); }, 900);
+  $(document).on('click', '#newSRBtn', () => {
+    if (!latestCustomer) { showMessage('Load a customer first.', 'danger'); return; }
+    $("#newSRModal").modal("show");
   });
 
-  // Edit/Close Service Request
   $(document).off("click", ".btn-update-sr, .btn-close-sr").on("click", ".btn-update-sr, .btn-close-sr", function() {
     const isUpdate = $(this).hasClass("btn-update-sr");
     const row = $(this).closest("tr");
@@ -150,21 +126,9 @@ function bindActionHandlers(data) {
     $("#editSRAlert").hide().removeClass();
     $("#editSRModal").modal("show");
   });
-
-  $("#editSRForm").off("submit").on("submit", async e => {
-    e.preventDefault();
-    const action = $("#editSRAction").val(), srType=$("#editSRType").val(), srDesc=$("#editSRDesc").val().trim();
-    if (!srDesc) return $("#editSRAlert").show().addClass('alert-danger').text("Description is required.");
-    const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:"", cardType:"", custEmail:data.email, custAction:action, serviceRequestType:srType, serviceDescription:srDesc };
-    $("#editSRAlert").removeClass().addClass('alert alert-info').show().text(`${action} in progress...`);
-    await sendAction(payload);
-    setTimeout(()=>{ $("#editSRModal").modal('hide'); refreshCustomerData(); }, 900);
-  });
 }
 
-/********************
- * Render Customer
- ********************/
+/************* Show customer *************/
 async function showCustomer(data) {
   latestCustomer = data;
   const div = document.getElementById('customer-details');
@@ -192,8 +156,10 @@ async function showCustomer(data) {
     </div>
   </div>`;
 
-  // Savings, Debit, Credit sections (unchanged)
-  const savingsTxs = (data.recent_transactions || []).filter(tx => !tx.transaction_medium || tx.transaction_medium.toLowerCase() === 'savings');
+  // ---------------- Savings Account ----------------
+  const savingsTxs = (data.recent_transactions || []).filter(
+    tx => !tx.transaction_medium || tx.transaction_medium.toLowerCase() === 'savings'
+  );
   html += `<h6 class="text-primary">Savings Account Transactions</h6>`;
   html += savingsTxs.length
     ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
@@ -206,7 +172,7 @@ async function showCustomer(data) {
          </tr>`).join('')}</tbody></table>`
     : `<p>No savings account transactions found.</p>`;
 
-  // Debit cards
+  // ---------------- Debit Cards ----------------
   html += `<h6 class="text-primary">Debit Card</h6>`;
   html += (data.debit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
@@ -224,7 +190,7 @@ async function showCustomer(data) {
       <div class="card-actions">${renderCardActions(c, "Debit")}</div>
     </div>`).join('');
 
-  // Credit cards
+  // ---------------- Credit Cards ----------------
   html += `<h6 class="text-primary">Credit Card</h6>`;
   html += (data.credit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
@@ -242,7 +208,7 @@ async function showCustomer(data) {
       <div class="card-actions">${renderCardActions(c, "Credit")}</div>
     </div>`).join('');
 
-  // Service Requests
+  // ---------------- Service Requests ----------------
   html += `<h6 class="text-primary">Service Requests</h6>`;
   html += (data.service_requests || []).length
     ? `<table class="table table-sm table-bordered crm-table">
@@ -270,56 +236,86 @@ async function showCustomer(data) {
   bindActionHandlers(data);
 }
 
-/********************
- * DOM Content Loaded
- ********************/
+/************* Dynamic form submit handlers *************/
+$(document).on("submit", "#newSRForm", async function(e) {
+  e.preventDefault();
+  if (!latestCustomer) { showMessage('Load a customer first.', 'danger'); return; }
+  const srType = $("#srType").val().trim();
+  const srDesc = $("#srDesc").val().trim();
+  if (!srType || !srDesc) return $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required.");
+
+  const payload = {
+    custPhone: latestCustomer.mobile_no,
+    custPhone2: latestCustomer.mobile_no2,
+    custAccount: latestCustomer.account_number || '',
+    custCard: "",
+    cardType: "",
+    custEmail: latestCustomer.email,
+    custAction: "NewRequest",
+    serviceRequestType: srType,
+    serviceDescription: srDesc
+  };
+
+  $("#newSRAlert").removeClass().addClass('alert alert-info').show().text("Creating Service Request...");
+  await sendAction(payload);
+  setTimeout(()=> { $("#newSRModal").modal('hide'); refreshCustomerData(); }, 900);
+});
+
+$(document).on("submit", "#editSRForm", async function(e) {
+  e.preventDefault();
+  const action = $("#editSRAction").val();
+  const srType = $("#editSRType").val();
+  const srDesc = $("#editSRDesc").val().trim();
+  if (!srDesc) return $("#editSRAlert").show().addClass('alert-danger').text("Description is required.");
+
+  const payload = {
+    custPhone: latestCustomer.mobile_no,
+    custPhone2: latestCustomer.mobile_no2,
+    custAccount: latestCustomer.account_number || '',
+    custCard: "",
+    cardType: "",
+    custEmail: latestCustomer.email,
+    custAction: action,
+    serviceRequestType: srType,
+    serviceDescription: srDesc
+  };
+
+  $("#editSRAlert").removeClass().addClass('alert alert-info').show().text(`${action} in progress...`);
+  await sendAction(payload);
+  setTimeout(()=> { $("#editSRModal").modal('hide'); refreshCustomerData(); }, 900);
+});
+
+/************* DOMContentLoaded *************/
 document.addEventListener('DOMContentLoaded', () => {
+  // Show current date/time
   const currentDateEl = document.getElementById('currentDate');
   if (currentDateEl) {
-    currentDateEl.textContent =
-      new Date().toLocaleString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    currentDateEl.textContent = new Date().toLocaleString('en-GB', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
   }
 
   const searchBtn = document.getElementById('searchBtn');
   const searchField = document.getElementById('searchMobile');
   const detailsDiv = document.getElementById('customer-details');
 
-  // Enter key triggers search
   searchField.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); searchBtn.click(); } });
 
-  // Search button
   searchBtn.onclick = async () => {
     const val = searchField.value.trim();
-    if (!val) { showMessage('Please enter a mobile, account, or email.', 'warning'); detailsDiv.style.display='none'; return; }
-
+    if (!val) { showMessage('Please enter a mobile, account, or email.', 'warning'); detailsDiv.style.display = 'none'; return; }
     showMessage('Loading customer info...', 'info');
     detailsDiv.style.display = 'none';
 
     let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
+    lastSearchVal = val; lastSearchType = type;
 
-    lastSearchVal = val;
-    lastSearchType = type;
-
-    try {
-      const data = await fetchCustomer(val, type);
-      await showCustomer(data);
-    } catch {
-      detailsDiv.style.display='none';
-      showMessage('Error fetching data.', 'danger');
-    }
+    try { const data = await fetchCustomer(val, type); await showCustomer(data); } 
+    catch { detailsDiv.style.display = 'none'; showMessage('Error fetching data.', 'danger'); }
   };
 
-  // URL param auto-search
   const params = new URLSearchParams(window.location.search);
   const paramVal = params.get('mobileNo');
-  if (paramVal) {
-    searchField.value = paramVal.trim();
-    searchBtn.click(); // Trigger search after handler bound
-  }
-
-  // New Service Request button
-  $(document).on('click', '#newSRBtn', () => {
-    if (!latestCustomer) { showMessage('Load a customer first.', 'danger'); return; }
-    $("#newSRModal").modal("show");
-  });
+  if (paramVal) { searchField.value = paramVal.trim(); searchBtn.click(); }
 });
