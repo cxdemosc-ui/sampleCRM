@@ -17,6 +17,10 @@ const ENDPOINTS = {
 };
 let latestCustomer = null;
 
+// Preserve last search details for refresh
+let lastSearchVal = '';
+let lastSearchType = '';
+
 function showMessage(msg, type='info') {
   const bar = document.getElementById('messageBar');
   if (bar) {
@@ -83,6 +87,14 @@ function renderCardActions(card, type) {
   return actions;
 }
 
+function refreshCustomerData() {
+  if (lastSearchVal) {
+    fetchCustomer(lastSearchVal, lastSearchType).then(showCustomer).catch(()=>{
+      showMessage('Error refreshing data.', 'danger');
+    });
+  }
+}
+
 function bindActionHandlers(data) {
   document.querySelectorAll('.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
     .forEach(btn => {
@@ -96,7 +108,7 @@ function bindActionHandlers(data) {
         const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:cardNo, cardType:typeLabel, custEmail:data.email, custAction:actionType, serviceRequestType:"", serviceDescription:"" };
         showMessage(`${actionType} request in progress...`, 'info');
         await sendAction(payload);
-        setTimeout(()=>document.getElementById('searchBtn').click(), 900);
+        setTimeout(refreshCustomerData, 900);
       };
     });
 
@@ -107,7 +119,7 @@ function bindActionHandlers(data) {
     const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:"", cardType:"", custEmail:data.email, custAction:"NewRequest", serviceRequestType:srType, serviceDescription:srDesc };
     $("#newSRAlert").removeClass().addClass('alert alert-info').show().text("Creating Service Request...");
     await sendAction(payload);
-    setTimeout(()=> { $("#newSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 900);
+    setTimeout(()=> { $("#newSRModal").modal('hide'); refreshCustomerData(); }, 900);
   });
 
   $(document).off("click", ".btn-update-sr, .btn-close-sr").on("click", ".btn-update-sr, .btn-close-sr", function() {
@@ -128,7 +140,7 @@ function bindActionHandlers(data) {
     const payload = { custPhone:data.mobile_no, custPhone2:data.mobile_no2, custAccount:data.account_number||'', custCard:"", cardType:"", custEmail:data.email, custAction:action, serviceRequestType:srType, serviceDescription:srDesc };
     $("#editSRAlert").removeClass().addClass('alert alert-info').show().text(`${action} in progress...`);
     await sendAction(payload);
-    setTimeout(()=>{ $("#editSRModal").modal('hide'); document.getElementById('searchBtn').click(); }, 900);
+    setTimeout(()=>{ $("#editSRModal").modal('hide'); refreshCustomerData(); }, 900);
   });
 }
 
@@ -238,18 +250,22 @@ async function showCustomer(data) {
   div.innerHTML = html;
   bindActionHandlers(data);
 }
+
 // Trying to make URL search working 
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Show current date/time in header
-  document.getElementById('currentDate').textContent =
-    new Date().toLocaleString('en-GB', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const currentDateEl = document.getElementById('currentDate');
+  if (currentDateEl) {
+    currentDateEl.textContent =
+      new Date().toLocaleString('en-GB', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+  }
 
   // 2. Get DOM elements
   const searchBtn = document.getElementById('searchBtn');
@@ -280,6 +296,10 @@ document.addEventListener('DOMContentLoaded', () => {
       ? 'email'
       : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
 
+    // Preserve for refresh
+    lastSearchVal = val;
+    lastSearchType = type;
+
     try {
       const data = await fetchCustomer(val, type);
       await showCustomer(data);
@@ -306,53 +326,3 @@ document.addEventListener('DOMContentLoaded', () => {
     $("#newSRModal").modal("show");
   });
 });
-
-
-// --
-// document.addEventListener('DOMContentLoaded', () => {
- // document.getElementById('currentDate').textContent =
- //   new Date().toLocaleString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
- // const searchBtn = document.getElementById('searchBtn');
- // const searchField = document.getElementById('searchMobile');
- // const detailsDiv = document.getElementById('customer-details');
- 
-// --- AUTO-LOAD SEARCH FROM URL PARAM ---
-// This block checks the page URL for a query parameter named "mobileNo"
-// and, if found, automatically populates the search box and triggers the search.
-// Supported formats: 
-//   ?mobileNo=6589485304
-//   ?mobileNo=19728899106
-//   ?mobileNo=wxccrtmsdemo@gmail.com
-// The camelCase "mobileNo" is case-sensitive; other variations won't match.
-//const params = new URLSearchParams(window.location.search);
-
-// Read the ?mobileNo parameter value (null if missing)
-// const paramVal = params.get('mobileNo');
-
-// if (paramVal) {
-// Remove any accidental leading/trailing spaces from the value
-//  const cleanVal = paramVal.trim();
-
-// Set the cleaned value into the search input field
-//  searchField.value = cleanVal;
-
-// Programmatically click the Search button to fetch customer data immediately
-//  searchBtn.click();
-//}
-// --- END AUTO-LOAD ---
-
-  
-//  searchField.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); searchBtn.click(); } });
-//  searchBtn.onclick = async () => {
-//    const val = searchField.value.trim();
-//    if (!val) { showMessage('Please enter a mobile, account, or email.', 'warning'); detailsDiv.style.display='none'; return; }
-//    showMessage('Loading customer info...', 'info'); detailsDiv.style.display='none';
-//    let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
-//    try { const data = await fetchCustomer(val,type); await showCustomer(data); }
-//    catch { detailsDiv.style.display='none'; showMessage('Error fetching data.', 'danger'); }
-//  };
-//  $(document).on('click', '#newSRBtn', () => {
-//    if (!latestCustomer){ showMessage('Load a customer first.','danger'); return; }
-//    $("#newSRModal").modal("show");
-//  });
-//});
