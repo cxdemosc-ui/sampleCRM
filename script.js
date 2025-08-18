@@ -1,13 +1,15 @@
 /*******************************************************
- * SampleCRM Frontend Script (2025-08, Revised Build)
+ * SampleCRM Frontend Script (2025-08, Final)
+ * - Preserves your original endpoints, API usage, UI, and functions
  * - Shows Savings transactions (null => "Savings")
  * - Section order: Savings → Debit → Credit → Service Requests
  * - Consistent column widths via .crm-table
- * - All existing functions/actions preserved
- * - FIX: After any action (Block/Unblock/Reissue/Lost/Dispute,
- *        New SR, Update SR, Close SR) the page auto-refreshes
- *        using the last search seed (account/email/mobile).
+ * - Action buttons now refresh reliably (with short polling)
  *******************************************************/
+
+/* ==============================
+   CONSTANTS & GLOBAL STATE
+   ============================== */
 
 const SUPABASE_PROJECT_REF = 'yrirrlfmjjfzcvmkuzpl';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaXJybGZtampmemN2bWt1enBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxODk1MzQsImV4cCI6MjA2ODc2NTUzNH0.Iyn8te51bM2e3Pvdjrx3BkG14WcBKuqFhoIq2PSwJ8A';
@@ -21,282 +23,135 @@ const ENDPOINTS = {
 
 let latestCustomer = null;
 
-/* ------------------------------------------------------------------
-   NEW: Preserve last search details for reliable post-action refresh
-   ------------------------------------------------------------------ */
+// Preserve last search details so refresh can re-fetch the exact same customer
 let lastSearchVal = '';
-let lastSearchType = ''; // 'account' | 'mobile' | 'email' | 'auto'
+let lastSearchType = '';
 
-/* ------------------------------
-   Helper: UI message bar helper
-   ------------------------------ */
+/* ==============================
+   UTILITIES
+   ============================== */
+
+// Show bootstrap-compatible alert in #messageBar
 function showMessage(msg, type='info') {
   const bar = document.getElementById('messageBar');
-  if (bar) {
-    bar.className = `alert alert-${type}`;
-    bar.innerText = msg;
-    bar.style.display = 'block';
-  }
+  if (!bar) return;
+  bar.className = `alert alert-${type}`;
+  bar.innerText = msg;
+  bar.style.display = 'block';
 }
 
-/* ------------------------------
-   Helpers: Formatting utilities
-   ------------------------------ */
 function maskCard(c) { return (!c || c.length < 4) ? '' : '**** **** **** ' + c.slice(-4); }
 function formatMoney(a) { const n = Number(a); return isNaN(n) ? '0.00' : n.toLocaleString(undefined, { minimumFractionDigits:2 }); }
 
 // Date formatting to DD-MM-YY HH:mm
 function formatDateDMYHM(dt) {
   if (!dt) return '';
-  let safe = String(dt).trim().replace(' ', 'T');
-  safe = safe.split('.')[0];
+  let safe = String(dt).trim().replace(' ', 'T');   // tolerate "YYYY-MM-DD HH:mm:ss"
+  safe = safe.split('.')[0];                        // drop fractional seconds if present
   const d = new Date(safe);
   if (isNaN(d)) return '';
   return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getFullYear()).slice(-2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
 function cardStatusBadge(status) {
-  const lc = String(status).toLowerCase();
+  const lc = String(status || '').toLowerCase();
   if (lc === 'active') return `<span class="badge badge-status active">Active</span>`;
   if (lc === 'blocked') return `<span class="badge badge-status blocked">Blocked</span>`;
   if (lc.includes('re-issue') || lc.includes('reissued') || lc.includes('reissue')) return `<span class="badge badge-status reissued">Re-Issued</span>`;
   if (lc === 'lost') return `<span class="badge badge-status lost">Lost</span>`;
-  return `<span class="badge badge-status">${status}</span>`;
+  return `<span class="badge badge-status">${status || ''}</span>`;
 }
 
-/* ------------------------------------------------------------------
-   API: Customer fetch via Supabase RPC
-   - FIX: Explicitly honor 'account' | 'mobile' | 'email' types
-          in addition to the original auto-detection.
-   ------------------------------------------------------------------ */
+// Sleep helper for async/await flow
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+/* ==============================
+   API CALLS
+   ============================== */
+
+// Unified customer search (mobile, account, email)
 async function fetchCustomer(identifier, searchType='auto') {
   const body = { p_mobile_no: null, p_account_number: null, p_email: null };
 
-  // Explicit types first
+  // Keep your original decision logic:
   if (searchType === 'email') {
     body.p_email = identifier;
-  } else if (searchType === 'account') {
+  } else if (/^\d{8}$/.test(identifier)) {
+    // If exactly 8 digits, treat as account number
     body.p_account_number = identifier;
-  } else if (searchType === 'mobile') {
-    body.p_mobile_no = identifier;
   } else {
-    // Original auto-detection (kept as-is)
-    if (/^\d{8}$/.test(identifier)) body.p_account_number = identifier;
-    else if (String(identifier).includes('@')) body.p_email = identifier;
-    else body.p_mobile_no = identifier;
+    // Otherwise treat as mobile number
+    body.p_mobile_no = identifier;
   }
 
   const r = await fetch(ENDPOINTS.getCustomer, {
     method: 'POST',
-    headers: { apikey: API_KEY, Authorization: `Bearer ${AUTH_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: {
+      apikey: API_KEY,
+      Authorization: `Bearer ${AUTH_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(body)
   });
+
   if (!r.ok) throw new Error(`API Error: ${r.status}`);
   return r.json();
 }
 
-/* ---------------------------------------------
-   API: Send action to Webex Connect hook (as-is)
-   --------------------------------------------- */
+// Webex Connect action (Block/Unblock/Reissue/Lost/Dispute & SR actions)
 async function sendAction(payload) {
   const r = await fetch(ENDPOINTS.webexAction, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+  // Some hooks return 202/empty body. Swallow JSON errors and return null.
   try { return await r.json(); } catch { return null; }
 }
 
-/* ---------------------------------------------
-   UI: Render card action buttons (as-is)
-   --------------------------------------------- */
-function renderCardActions(card, type) {
-  const status = (card.status || '').toLowerCase();
-  let actions = status !== 'blocked'
-    ? `<button class="btn btn-sm btn-block-card" data-type="${type}" data-no="${card.card_number}">Block</button> `
-    : `<button class="btn btn-sm btn-unblock-card" data-type="${type}" data-no="${card.card_number}">UnBlock</button> `;
-  const dis = (/re\-?issued?/i.test(status) || /lost/i.test(status)) ? 'disabled' : '';
-  actions += `<button class="btn btn-sm btn-reissue-card" data-type="${type}" data-no="${card.card_number}" ${dis}>Reissue</button>
-              <button class="btn btn-sm btn-mark-lost" data-type="${type}" data-no="${card.card_number}" ${dis}>Lost</button>
-              <button class="btn btn-sm btn-dispute" data-type="${type}" data-no="${card.card_number}" ${dis}>Dispute</button>`;
-  return actions;
-}
+/* ==============================
+   REFRESH HELPERS
+   ============================== */
 
-/* ------------------------------------------------------------------
-   NEW: Robust refresh helpers (used after actions complete)
-   - Uses lastSearchVal/Type if available, otherwise falls back to
-     latestCustomer (prefers account → email → mobile).
-   - Includes a short retry loop to allow backend to settle.
-   ------------------------------------------------------------------ */
-function getRefreshSeed() {
-  if (lastSearchVal) return { val: lastSearchVal, type: lastSearchType || 'auto' };
-  if (latestCustomer) {
-    if (latestCustomer.account_number) return { val: latestCustomer.account_number, type: 'account' };
-    if (latestCustomer.email) return { val: latestCustomer.email, type: 'email' };
-    if (latestCustomer.mobile_no) return { val: latestCustomer.mobile_no, type: 'mobile' };
-  }
-  return null;
-}
-
-function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
-
-async function refreshCustomerDataWithRetry(maxAttempts = 4, gapMs = 900) {
-  const seed = getRefreshSeed();
-  if (!seed) {
-    console.warn('No refresh seed available.');
-    return;
-  }
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const data = await fetchCustomer(seed.val, seed.type);
-      await showCustomer(data);
-      return; // success
-    } catch (e) {
-      if (attempt === maxAttempts) {
-        console.error('Refresh failed after attempts:', e);
-        showMessage('Error refreshing data.', 'danger');
-        return;
-      }
-      await sleep(gapMs);
-    }
+// Re-fetch customer using last search details
+async function refreshCustomerData() {
+  if (!lastSearchVal) return;
+  try {
+    const data = await fetchCustomer(lastSearchVal, lastSearchType);
+    await showCustomer(data);
+  } catch (e) {
+    showMessage('Error refreshing data.', 'danger');
   }
 }
 
-/* ------------------------------------------------------------------
-   ACTION BINDER:
-   - Keeps your original handlers/flows intact.
-   - FIX: After sendAction(), await a refresh with retry.
-   - Adds minimal button disabling to prevent double clicks.
-   ------------------------------------------------------------------ */
-function bindActionHandlers(data) {
-  // Card actions (Block/Unblock/Reissue/Lost/Dispute)
-  document.querySelectorAll('.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
-    .forEach(btn => {
-      btn.onclick = async () => {
-        const cardNo = btn.dataset.no, typeLabel = btn.dataset.type;
-        let actionType =
-          btn.classList.contains('btn-block-card') ? 'Block' :
-          btn.classList.contains('btn-unblock-card') ? 'UnBlock' :
-          btn.classList.contains('btn-reissue-card') ? 'Reissue' :
-          btn.classList.contains('btn-mark-lost') ? 'Lost' : 'Dispute';
-
-        if (['Block','UnBlock','Reissue','Lost'].includes(actionType)) {
-          const ok = confirm(`${actionType} this ${typeLabel} card?\nCard Number: ${cardNo.slice(-4)}`);
-          if (!ok) return;
-        }
-
-        const payload = {
-          custPhone: data.mobile_no,
-          custPhone2: data.mobile_no2,
-          custAccount: data.account_number || '',
-          custCard: cardNo,
-          cardType: typeLabel,
-          custEmail: data.email,
-          custAction: actionType,
-          serviceRequestType: "",
-          serviceDescription: ""
-        };
-
-        // UX: disable button during processing
-        btn.disabled = true;
-        showMessage(`${actionType} request in progress...`, 'info');
-
-        try {
-          await sendAction(payload);
-          // Refresh with retry to allow backend to update
-          await refreshCustomerDataWithRetry(4, 1000);
-          showMessage(`${actionType} completed. Data refreshed.`, 'success');
-        } catch {
-          showMessage(`${actionType} failed.`, 'danger');
-        } finally {
-          btn.disabled = false;
-        }
-      };
-    });
-
-  // Open SR edit/close modal from table
-  $(document).off("click", ".btn-update-sr, .btn-close-sr").on("click", ".btn-update-sr, .btn-close-sr", function() {
-    const isUpdate = $(this).hasClass("btn-update-sr");
-    const row = $(this).closest("tr");
-    $("#editSRModalLabel").text(isUpdate ? "Update Service Request" : "Close Service Request");
-    $("#editSRAction").val(isUpdate ? "Update" : "Close");
-    $("#editSRType").val(row.find("td:nth-child(2)").text());
-    $("#editSRDesc").val(row.find(".sr-desc").attr("title") || "");
-    $("#editSRAlert").hide().removeClass();
-    $("#editSRModal").modal("show");
-  });
-
-  // NEW SR form submit (kept logic; added refresh await)
-  $("#newSRForm").off("submit").on("submit", async e => {
-    e.preventDefault();
-    const srType = $("#srType").val().trim(), srDesc = $("#srDesc").val().trim();
-    if (!srType || !srDesc) {
-      $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required.");
-      return;
-    }
-    const payload = {
-      custPhone: data.mobile_no,
-      custPhone2: data.mobile_no2,
-      custAccount: data.account_number || '',
-      custCard: "",
-      cardType: "",
-      custEmail: data.email,
-      custAction: "NewRequest",
-      serviceRequestType: srType,
-      serviceDescription: srDesc
-    };
-    $("#newSRAlert").removeClass().addClass('alert alert-info').show().text("Creating Service Request...");
-    try {
-      await sendAction(payload);
-      await refreshCustomerDataWithRetry(4, 1000);
-      $("#newSRModal").modal('hide');
-      showMessage('Service Request created.', 'success');
-    } catch {
-      $("#newSRAlert").removeClass().addClass('alert alert-danger').text("Failed to create Service Request.");
-    }
-  });
-
-  // EDIT/CLOSE SR form submit (kept logic; added refresh await)
-  $("#editSRForm").off("submit").on("submit", async e => {
-    e.preventDefault();
-    const action = $("#editSRAction").val(), srType=$("#editSRType").val(), srDesc=$("#editSRDesc").val().trim();
-    if (!srDesc) {
-      $("#editSRAlert").show().addClass('alert-danger').text("Description is required.");
-      return;
-    }
-    const payload = {
-      custPhone: data.mobile_no,
-      custPhone2: data.mobile_no2,
-      custAccount: data.account_number || '',
-      custCard: "",
-      cardType: "",
-      custEmail: data.email,
-      custAction: action,
-      serviceRequestType: srType,
-      serviceDescription: srDesc
-    };
-    $("#editSRAlert").removeClass().addClass('alert alert-info').show().text(`${action} in progress...`);
-    try {
-      await sendAction(payload);
-      await refreshCustomerDataWithRetry(4, 1000);
-      $("#editSRModal").modal('hide');
-      showMessage(`Service Request ${action.toLowerCase()}d.`, 'success');
-    } catch {
-      $("#editSRAlert").removeClass().addClass('alert alert-danger').text(`${action} failed.`);
-    }
-  });
+// After actions, your backend may update asynchronously.
+// This polls a few times so UI catches the update without manual re-search.
+async function pollRefreshAfterAction({
+  initialDelay = 800,   // wait a moment for backend to start processing
+  tries = 6,            // total refresh attempts
+  interval = 1500       // wait between attempts
+} = {}) {
+  await sleep(initialDelay);
+  for (let i = 0; i < tries; i++) {
+    await refreshCustomerData();
+    // Optional: Break early if you can detect a change. We keep it simple & safe.
+    await sleep(interval);
+  }
 }
 
-/* ---------------------------------------------
-   UI: Render customer view (as-is)
-   --------------------------------------------- */
+/* ==============================
+   RENDERING
+   ============================== */
+
 async function showCustomer(data) {
   latestCustomer = data;
   const div = document.getElementById('customer-details');
+
   if (!data || data.error) {
     if (div) div.style.display = 'none';
     return showMessage(data?.error || 'No customer found.', 'danger');
   }
+
   if (div) div.style.display = 'block';
   const msg = document.getElementById('messageBar');
   if (msg) msg.style.display = 'none';
@@ -306,8 +161,8 @@ async function showCustomer(data) {
       <div class="col-md-6">
         <h5 class="text-primary">${data.customer_first_name || data.first_name} ${data.customer_last_name || data.last_name}</h5>
         <div><strong>Mobile:</strong> ${data.mobile_no}</div>
-        <div><strong>Alt Mobile:</strong> ${data.mobile_no2}</div>
-        <div><strong>Email:</strong> ${data.email}</div>
+        <div><strong>Alt Mobile:</strong> ${data.mobile_no2 || ''}</div>
+        <div><strong>Email:</strong> ${data.email || ''}</div>
       </div>
       <div class="col-md-6">
         <div><strong>Address:</strong> ${data.customer_address || data.address || 'N/A'}</div>
@@ -318,9 +173,9 @@ async function showCustomer(data) {
     </div>
   </div>`;
 
-  // Savings Account section FIRST
+  // Savings Account section FIRST (transaction_medium null => treat as "Savings")
   const savingsTxs = (data.recent_transactions || []).filter(
-    tx => !tx.transaction_medium || tx.transaction_medium.toLowerCase() === 'savings'
+    tx => !tx.transaction_medium || String(tx.transaction_medium).toLowerCase() === 'savings'
   );
   html += `<h6 class="text-primary">Savings Account Transactions</h6>`;
   html += savingsTxs.length
@@ -328,7 +183,7 @@ async function showCustomer(data) {
        <tbody>${savingsTxs.map(tx => `
          <tr>
            <td>${formatDateDMYHM(tx.transaction_date)}</td>
-           <td>${tx.transaction_type}</td>
+           <td>${tx.transaction_type || ''}</td>
            <td>${formatMoney(tx.amount)}</td>
            <td>${tx.reference_note || ''}</td>
          </tr>`).join('')}</tbody></table>`
@@ -344,7 +199,7 @@ async function showCustomer(data) {
            <tbody>${c.transactions.map(tx => `
              <tr>
                <td>${formatDateDMYHM(tx.transaction_date)}</td>
-               <td>${tx.transaction_type}</td>
+               <td>${tx.transaction_type || ''}</td>
                <td>${formatMoney(tx.amount)}</td>
                <td>${tx.reference_note || ''}</td>
              </tr>`).join('')}</tbody></table>`
@@ -362,7 +217,7 @@ async function showCustomer(data) {
            <tbody>${c.transactions.map(tx => `
              <tr>
                <td>${formatDateDMYHM(tx.transaction_date)}</td>
-               <td>${tx.transaction_type}</td>
+               <td>${tx.transaction_type || ''}</td>
                <td>${formatMoney(tx.amount)}</td>
                <td>${tx.reference_note || ''}</td>
              </tr>`).join('')}</tbody></table>`
@@ -378,8 +233,8 @@ async function showCustomer(data) {
          <tbody>${data.service_requests.map(sr => `
            <tr>
              <td>${sr.request_id}</td>
-             <td>${sr.request_type}</td>
-             <td>${sr.status}</td>
+             <td>${sr.request_type || ''}</td>
+             <td>${sr.status || ''}</td>
              <td>${formatDateDMYHM(sr.raised_date)}</td>
              <td>${sr.resolution_date ? formatDateDMYHM(sr.resolution_date) : '-'}</td>
              <td class="sr-desc" title="${sr.description || ''}">${sr.description || ''}</td>
@@ -394,40 +249,175 @@ async function showCustomer(data) {
     : `<p>No service requests found.</p>
        <div class="mt-2 text-right"><button id="newSRBtn" class="btn btn-primary">Create New Service Request</button></div>`;
 
-  const container = document.getElementById('customer-details');
-  if (container) container.innerHTML = html;
+  div.innerHTML = html;
 
-  // Re-bind actions for the freshly rendered DOM
+  // Bind/ensure handlers are active for the freshly rendered content
   bindActionHandlers(data);
 }
 
-/* ----------------------------------------------------
-   PAGE BOOTSTRAP
-   - Keeps your original DOMContentLoaded logic intact
-   - Ensures we store lastSearchVal/Type for refresh
-   ---------------------------------------------------- */
+/* ==============================
+   ACTION BUTTONS & FORM BINDINGS
+   ============================== */
+
+function renderCardActions(card, type) {
+  const status = (card.status || '').toLowerCase();
+  let actions = status !== 'blocked'
+    ? `<button class="btn btn-sm btn-block-card" data-type="${type}" data-no="${card.card_number}">Block</button> `
+    : `<button class="btn btn-sm btn-unblock-card" data-type="${type}" data-no="${card.card_number}">UnBlock</button> `;
+  const dis = (/re\-?issued?/i.test(status) || /lost/i.test(status)) ? 'disabled' : '';
+  actions += `<button class="btn btn-sm btn-reissue-card" data-type="${type}" data-no="${card.card_number}" ${dis}>Reissue</button>
+              <button class="btn btn-sm btn-mark-lost" data-type="${type}" data-no="${card.card_number}" ${dis}>Lost</button>
+              <button class="btn btn-sm btn-dispute" data-type="${type}" data-no="${card.card_number}" ${dis}>Dispute</button>`;
+  return actions;
+}
+
+/**
+ * Attach handlers for:
+ *  - Card actions (Block/Unblock/Reissue/Lost/Dispute)
+ *  - New SR form
+ *  - Update/Close SR form
+ * Notes:
+ *  - We use jQuery delegated handlers for dynamic content.
+ *  - For SR button to open modal, we keep the existing #newSRBtn binding too.
+ */
+function bindActionHandlers(data) {
+  // Card action buttons (delegated so re-rendering won't break them)
+  $(document).off('click.crmActions', '.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute')
+    .on('click.crmActions', '.btn-block-card, .btn-unblock-card, .btn-reissue-card, .btn-mark-lost, .btn-dispute', async function() {
+      const btn = this;
+      const cardNo = btn.dataset.no;
+      const typeLabel = btn.dataset.type;
+
+      let actionType =
+        btn.classList.contains('btn-block-card')   ? 'Block'   :
+        btn.classList.contains('btn-unblock-card') ? 'UnBlock' :
+        btn.classList.contains('btn-reissue-card') ? 'Reissue' :
+        btn.classList.contains('btn-mark-lost')    ? 'Lost'    : 'Dispute';
+
+      if (['Block','UnBlock','Reissue','Lost'].includes(actionType)) {
+        const ok = confirm(`${actionType} this ${typeLabel} card?\nCard Number: ${String(cardNo).slice(-4)}`);
+        if (!ok) return;
+      }
+
+      const payload = {
+        custPhone:  data.mobile_no,
+        custPhone2: data.mobile_no2,
+        custAccount:data.account_number || '',
+        custCard:   cardNo,
+        cardType:   typeLabel,
+        custEmail:  data.email,
+        custAction: actionType,
+        serviceRequestType: "",
+        serviceDescription: ""
+      };
+
+      showMessage(`${actionType} request in progress...`, 'info');
+      await sendAction(payload);
+
+      // Poll a few times to catch backend async updates
+      await pollRefreshAfterAction();
+    });
+
+  // New SR form (create)
+  $("#newSRForm").off("submit.crmNewSR").on("submit.crmNewSR", async e => {
+    e.preventDefault();
+    const srType = $("#srType").val().trim();
+    const srDesc = $("#srDesc").val().trim();
+    if (!srType || !srDesc) {
+      $("#newSRAlert").show().addClass('alert-danger').text("Type and Description required.");
+      return;
+    }
+
+    const payload = {
+      custPhone:  data.mobile_no,
+      custPhone2: data.mobile_no2,
+      custAccount:data.account_number || '',
+      custCard:   "",
+      cardType:   "",
+      custEmail:  data.email,
+      custAction: "NewRequest",
+      serviceRequestType: srType,
+      serviceDescription: srDesc
+    };
+
+    $("#newSRAlert").removeClass().addClass('alert alert-info').show().text("Creating Service Request...");
+    await sendAction(payload);
+    $("#newSRModal").modal('hide');
+
+    await pollRefreshAfterAction();
+  });
+
+  // Prepare Update/Close SR modal (delegated)
+  $(document).off("click.crmOpenEdit", ".btn-update-sr, .btn-close-sr")
+    .on("click.crmOpenEdit", ".btn-update-sr, .btn-close-sr", function() {
+      const isUpdate = $(this).hasClass("btn-update-sr");
+      const row = $(this).closest("tr");
+      $("#editSRModalLabel").text(isUpdate ? "Update Service Request" : "Close Service Request");
+      $("#editSRAction").val(isUpdate ? "Update" : "Close");
+      $("#editSRType").val(row.find("td:nth-child(2)").text());
+      $("#editSRDesc").val(row.find(".sr-desc").attr("title") || "");
+      $("#editSRAlert").hide().removeClass();
+      $("#editSRModal").modal("show");
+    });
+
+  // Submit Update/Close SR
+  $("#editSRForm").off("submit.crmEditSR").on("submit.crmEditSR", async e => {
+    e.preventDefault();
+    const action = $("#editSRAction").val();
+    const srType = $("#editSRType").val();
+    const srDesc = $("#editSRDesc").val().trim();
+    if (!srDesc) {
+      $("#editSRAlert").show().addClass('alert-danger').text("Description is required.");
+      return;
+    }
+
+    const payload = {
+      custPhone:  data.mobile_no,
+      custPhone2: data.mobile_no2,
+      custAccount:data.account_number || '',
+      custCard:   "",
+      cardType:   "",
+      custEmail:  data.email,
+      custAction: action,                 // "Update" or "Close"
+      serviceRequestType: srType,
+      serviceDescription: srDesc
+    };
+
+    $("#editSRAlert").removeClass().addClass('alert alert-info').show().text(`${action} in progress...`);
+    await sendAction(payload);
+    $("#editSRModal").modal('hide');
+
+    await pollRefreshAfterAction();
+  });
+}
+
+/* ==============================
+   BOOTSTRAP / PAGE INIT
+   ============================== */
+
+// Try to make URL search working + normal search flow preserved
 document.addEventListener('DOMContentLoaded', () => {
-  // 1) Show current date/time in header (guarded)
+  // 1) Show current date/time in header (safe guard if el missing)
   const currentDateEl = document.getElementById('currentDate');
   if (currentDateEl) {
-    currentDateEl.textContent =
-      new Date().toLocaleString('en-GB', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+    currentDateEl.textContent = new Date().toLocaleString('en-GB', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
-  // 2) Get DOM elements (guarded)
-  const searchBtn = document.getElementById('searchBtn');
-  const searchField = document.getElementById('searchMobile');
-  const detailsDiv = document.getElementById('customer-details');
+  // 2) Get DOM elements
+  const searchBtn   = document.getElementById('searchBtn');
+  const searchField = document.getElementById('searchMobile');  // keep your original ID
+  const detailsDiv  = document.getElementById('customer-details');
 
-  if (!searchBtn || !searchField || !detailsDiv) {
-    console.warn('Expected search elements not found. Check IDs: searchBtn, searchMobile, customer-details.');
+  // Guard early if search elements missing
+  if (!searchBtn || !searchField) {
+    console.warn('Search controls not found on page.');
     return;
   }
 
@@ -439,47 +429,47 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 4) Main search click handler (kept; PLUS store lastSearchVal/Type)
+  // 4) Main search click handler (preserves lastSearchVal/Type)
   searchBtn.onclick = async () => {
-    const val = searchField.value.trim();
+    const val = (searchField.value || '').trim();
     if (!val) {
       showMessage('Please enter a mobile, account, or email.', 'warning');
-      detailsDiv.style.display = 'none';
+      if (detailsDiv) detailsDiv.style.display = 'none';
       return;
     }
 
     showMessage('Loading customer info...', 'info');
-    detailsDiv.style.display = 'none';
+    if (detailsDiv) detailsDiv.style.display = 'none';
 
-    // Detect type (kept as-is)
+    // Detect type: email if contains '@'; account if exactly 8 digits; else mobile
     let type = val.includes('@')
       ? 'email'
       : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
 
-    // Preserve for refresh
+    // Preserve for refresh after actions
     lastSearchVal = val;
     lastSearchType = type;
 
     try {
       const data = await fetchCustomer(val, type);
       await showCustomer(data);
-    } catch {
-      detailsDiv.style.display = 'none';
+    } catch (e) {
+      if (detailsDiv) detailsDiv.style.display = 'none';
       showMessage('Error fetching data.', 'danger');
     }
   };
 
-  // 5) Auto-load from URL param (case-sensitive, kept)
+  // 5) Auto-load from URL param (case-sensitive: ?mobileNo=...)
   const params = new URLSearchParams(window.location.search);
   const paramVal = params.get('mobileNo');
   if (paramVal) {
     searchField.value = paramVal.trim();
-    // This click will also set lastSearchVal/Type via the handler above
+    // Trigger search now that handler is bound AND ensure lastSearch* are set
     searchBtn.click();
   }
 
-  // 6) Bind "Create New Service Request" button (kept)
-  $(document).on('click', '#newSRBtn', () => {
+  // 6) Bind "Create New Service Request" button (kept from your original)
+  $(document).off('click.crmNewSRBtn', '#newSRBtn').on('click.crmNewSRBtn', '#newSRBtn', () => {
     if (!latestCustomer) {
       showMessage('Load a customer first.', 'danger');
       return;
@@ -488,54 +478,4 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-/* ----------------------------------------------------
-   (Your original commented block retained for reference)
-   ----------------------------------------------------
-// --
-// document.addEventListener('DOMContentLoaded', () => {
- // document.getElementById('currentDate').textContent =
- //   new Date().toLocaleString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
- // const searchBtn = document.getElementById('searchBtn');
- // const searchField = document.getElementById('searchMobile');
- // const detailsDiv = document.getElementById('customer-details');
- 
-// --- AUTO-LOAD SEARCH FROM URL PARAM ---
-// This block checks the page URL for a query parameter named "mobileNo"
-// and, if found, automatically populates the search box and triggers the search.
-// Supported formats: 
-//   ?mobileNo=6589485304
-//   ?mobileNo=19728899106
-//   ?mobileNo=wxccrtmsdemo@gmail.com
-// The camelCase "mobileNo" is case-sensitive; other variations won't match.
-//const params = new URLSearchParams(window.location.search);
-
-// Read the ?mobileNo parameter value (null if missing)
-// const paramVal = params.get('mobileNo');
-
-// if (paramVal) {
-// Remove any accidental leading/trailing spaces from the value
-//  const cleanVal = paramVal.trim();
-
-// Set the cleaned value into the search input field
-//  searchField.value = cleanVal;
-
-// Programmatically click the Search button to fetch customer data immediately
-//  searchBtn.click();
-//}
-// --- END AUTO-LOAD ---
-
-  
-//  searchField.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); searchBtn.click(); } });
-//  searchBtn.onclick = async () => {
-//    const val = searchField.value.trim();
-//    if (!val) { showMessage('Please enter a mobile, account, or email.', 'warning'); detailsDiv.style.display='none'; return; }
-//    showMessage('Loading customer info...', 'info'); detailsDiv.style.display='none';
-//    let type = val.includes('@') ? 'email' : (/^\d{8}$/.test(val) ? 'account' : 'mobile');
-//    try { const data = await fetchCustomer(val,type); await showCustomer(data); }
-//    catch { detailsDiv.style.display='none'; showMessage('Error fetching data.', 'danger'); }
-//  };
-//  $(document).on('click', '#newSRBtn', () => {
-//    if (!latestCustomer){ showMessage('Load a customer first.','danger'); return; }
-//    $("#newSRModal").modal("show");
-//  });
-//});
+/*  ======= End of File =======  */
