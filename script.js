@@ -43,6 +43,67 @@ function showMessage(msg, type='info') {
 function maskCard(c) { return (!c || c.length < 4) ? '' : '**** **** **** ' + c.slice(-4); }
 function formatMoney(a) { const n = Number(a); return isNaN(n) ? '0.00' : n.toLocaleString(undefined, { minimumFractionDigits:2 }); }
 
+function firstAvailableValue(source, keys) {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return null;
+}
+
+function formatMoneyOrUnavailable(value) {
+  return value === null ? 'Not available' : `$${formatMoney(value)}`;
+}
+
+function formatPaymentDate(value) {
+  if (!value) return 'Not available';
+  const safe = String(value).trim().replace(' ', 'T').split('.')[0];
+  const date = new Date(safe);
+  if (isNaN(date)) return String(value);
+  return `${String(date.getDate()).padStart(2,'0')}-${String(date.getMonth()+1).padStart(2,'0')}-${date.getFullYear()}`;
+}
+
+function renderCreditPaymentSummary(card) {
+  const balanceDue = firstAvailableValue(card, [
+    'balance_due', 'outstanding_balance', 'balance_outstanding', 'current_balance'
+  ]);
+  const minimumDue = firstAvailableValue(card, [
+    'minimum_due', 'min_due', 'minimum_payment_due', 'minimum_payment'
+  ]);
+  const paymentDueDate = firstAvailableValue(card, [
+    'payment_due_date', 'due_date', 'date_of_payment', 'payment_date'
+  ]);
+  const totalCardLimit = firstAvailableValue(card, [
+    'total_card_limit', 'card_limit', 'credit_limit', 'total_limit'
+  ]);
+  const remainingLimit = firstAvailableValue(card, [
+    'remaining_limit', 'available_limit', 'available_credit', 'remaining_credit'
+  ]);
+
+  return `<div class="credit-payment-summary" aria-label="Credit card payment summary">
+    <div class="payment-summary-item">
+      <span class="payment-summary-label">Balance Due / Outstanding</span>
+      <strong>${formatMoneyOrUnavailable(balanceDue)}</strong>
+    </div>
+    <div class="payment-summary-item">
+      <span class="payment-summary-label">Minimum Due</span>
+      <strong>${formatMoneyOrUnavailable(minimumDue)}</strong>
+    </div>
+    <div class="payment-summary-item">
+      <span class="payment-summary-label">Payment Due Date</span>
+      <strong>${formatPaymentDate(paymentDueDate)}</strong>
+    </div>
+    <div class="payment-summary-item">
+      <span class="payment-summary-label">Total Card Limit</span>
+      <strong>${formatMoneyOrUnavailable(totalCardLimit)}</strong>
+    </div>
+    <div class="payment-summary-item">
+      <span class="payment-summary-label">Remaining Limit</span>
+      <strong>${formatMoneyOrUnavailable(remainingLimit)}</strong>
+    </div>
+  </div>`;
+}
+
 // Date formatting to DD-MM-YY HH:mm
 function formatDateDMYHM(dt) {
   if (!dt) return '';
@@ -62,8 +123,24 @@ function cardStatusBadge(status) {
   return `<span class="badge badge-status">${status || ''}</span>`;
 }
 
-// Sleep helper for async/await flow
-function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+function formatCardExpiry(value) {
+  if (!value) return 'Not available';
+  const raw = String(value).trim();
+  if (/^(0[1-9]|1[0-2])\/?\d{2}$/.test(raw)) {
+    return raw.includes('/') ? raw : `${raw.slice(0, 2)}/${raw.slice(2)}`;
+  }
+  const safe = raw.replace(' ', 'T').split('.')[0];
+  const date = new Date(safe);
+  if (isNaN(date)) return raw;
+  return `${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getFullYear()).slice(-2)}`;
+}
+
+function renderCardExpiry(card) {
+  const expiry = firstAvailableValue(card, [
+    'expiry_date', 'expiration_date', 'card_expiry', 'expiry', 'valid_thru'
+  ]);
+  return `<span class="card-expiry"><span>Expires</span> ${formatCardExpiry(expiry)}</span>`;
+}
 
 /* ==============================
    API CALLS
@@ -117,25 +194,12 @@ async function sendAction(payload) {
 async function refreshCustomerData() {
   if (!lastSearchVal) return;
   try {
+    showMessage('Refreshing customer data...', 'info');
     const data = await fetchCustomer(lastSearchVal, lastSearchType);
     await showCustomer(data);
+    showMessage('Customer data refreshed.', 'success');
   } catch (e) {
     showMessage('Error refreshing data.', 'danger');
-  }
-}
-
-// After actions, your backend may update asynchronously.
-// This polls a few times so UI catches the update without manual re-search.
-async function pollRefreshAfterAction({
-  initialDelay = 800,   // wait a moment for backend to start processing
-  tries = 6,            // total refresh attempts
-  interval = 1500       // wait between attempts
-} = {}) {
-  await sleep(initialDelay);
-  for (let i = 0; i < tries; i++) {
-    await refreshCustomerData();
-    // Optional: Break early if you can detect a change. We keep it simple & safe.
-    await sleep(interval);
   }
 }
 
@@ -149,10 +213,14 @@ async function showCustomer(data) {
 
   if (!data || data.error) {
     if (div) div.style.display = 'none';
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) refreshBtn.disabled = true;
     return showMessage(data?.error || 'No customer found.', 'danger');
   }
 
   if (div) div.style.display = 'block';
+  const refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) refreshBtn.disabled = false;
   const msg = document.getElementById('messageBar');
   if (msg) msg.style.display = 'none';
 
@@ -193,7 +261,10 @@ async function showCustomer(data) {
   html += `<h6 class="text-primary">Debit Card</h6>`;
   html += (data.debit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
-      ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
+      <div class="card-heading">
+        <span>${maskCard(c.card_number)} ${cardStatusBadge(c.status)}</span>
+        ${renderCardExpiry(c)}
+      </div>
       ${(c.transactions && c.transactions.length)
         ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
            <tbody>${c.transactions.map(tx => `
@@ -211,7 +282,11 @@ async function showCustomer(data) {
   html += `<h6 class="text-primary">Credit Card</h6>`;
   html += (data.credit_cards || []).map(c => `
     <div class="border rounded p-2 mb-2 bg-white card-section">
-      ${maskCard(c.card_number)} ${cardStatusBadge(c.status)}
+      <div class="card-heading">
+        <span>${maskCard(c.card_number)} ${cardStatusBadge(c.status)}</span>
+        ${renderCardExpiry(c)}
+      </div>
+      ${renderCreditPaymentSummary(c)}
       ${(c.transactions && c.transactions.length)
         ? `<table class="table table-sm table-bordered crm-table"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Reference</th></tr></thead>
            <tbody>${c.transactions.map(tx => `
@@ -313,9 +388,7 @@ function bindActionHandlers(data) {
 
       showMessage(`${actionType} request in progress...`, 'info');
       await sendAction(payload);
-
-      // Poll a few times to catch backend async updates
-      await pollRefreshAfterAction();
+      showMessage(`${actionType} request submitted. Refresh customer data when needed.`, 'success');
     });
 
   // New SR form (create)
@@ -343,8 +416,7 @@ function bindActionHandlers(data) {
     $("#newSRAlert").removeClass().addClass('alert alert-info').show().text("Creating Service Request...");
     await sendAction(payload);
     $("#newSRModal").modal('hide');
-
-    await pollRefreshAfterAction();
+    showMessage('Service request submitted. Refresh customer data when needed.', 'success');
   });
 
   // Prepare Update/Close SR modal (delegated)
@@ -386,8 +458,7 @@ function bindActionHandlers(data) {
     $("#editSRAlert").removeClass().addClass('alert alert-info').show().text(`${action} in progress...`);
     await sendAction(payload);
     $("#editSRModal").modal('hide');
-
-    await pollRefreshAfterAction();
+    showMessage(`${action} request submitted. Refresh customer data when needed.`, 'success');
   });
 }
 
@@ -412,6 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 2) Get DOM elements
   const searchBtn   = document.getElementById('searchBtn');
+  const refreshBtn  = document.getElementById('refreshBtn');
   const searchField = document.getElementById('searchMobile');  // keep your original ID
   const detailsDiv  = document.getElementById('customer-details');
 
@@ -458,6 +530,10 @@ document.addEventListener('DOMContentLoaded', () => {
       showMessage('Error fetching data.', 'danger');
     }
   };
+
+  if (refreshBtn) {
+    refreshBtn.onclick = refreshCustomerData;
+  }
 
   // 5) Auto-load from URL param (case-sensitive: ?mobileNo=...)
   const params = new URLSearchParams(window.location.search);
