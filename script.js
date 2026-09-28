@@ -63,6 +63,19 @@ function formatPaymentDate(value) {
   return `${String(date.getDate()).padStart(2,'0')}-${String(date.getMonth()+1).padStart(2,'0')}-${date.getFullYear()}`;
 }
 
+function renderAccountSummary(data) {
+  return `<div class="credit-payment-summary account-summary" aria-label="Account summary">
+    <div class="payment-summary-item">
+      <span class="payment-summary-label">Account Number</span>
+      <strong>${data.account_number || 'Not available'}</strong>
+    </div>
+    <div class="payment-summary-item">
+      <span class="payment-summary-label">Account Balance</span>
+      <strong>${formatMoneyOrUnavailable(data.account_balance)}</strong>
+    </div>
+  </div>`;
+}
+
 function renderCreditPaymentSummary(card) {
   const balanceDue = firstAvailableValue(card, [
     'balance_due', 'outstanding_balance', 'balance_outstanding', 'current_balance'
@@ -224,22 +237,21 @@ async function showCustomer(data) {
   const msg = document.getElementById('messageBar');
   if (msg) msg.style.display = 'none';
 
-  let html = `<div class="card p-3 mb-3 bg-light border-primary">
-    <div class="row">
-      <div class="col-md-6">
-        <h5 class="text-primary">${data.customer_first_name || data.first_name} ${data.customer_last_name || data.last_name}</h5>
-        <div><strong>Mobile:</strong> ${data.mobile_no}</div>
-        <div><strong>Alt Mobile:</strong> ${data.mobile_no2 || ''}</div>
-        <div><strong>Email:</strong> ${data.email || ''}</div>
-      </div>
-      <div class="col-md-6">
-        <div><strong>Address:</strong> ${data.customer_address || data.address || 'N/A'}</div>
-        <div><strong>City:</strong> ${data.customer_city || data.city || 'N/A'}</div>
-        <div><strong>Account Number:</strong> ${data.account_number || 'N/A'}</div>
-        <div><strong>Account Balance:</strong> $${formatMoney(data.account_balance)}</div>
-      </div>
+  let html = `<div class="customer-info-card mb-3">
+    <div class="customer-info-header">
+      <span class="customer-info-label">Customer Information</span>
+      <h5 class="text-primary">${data.customer_first_name || data.first_name} ${data.customer_last_name || data.last_name}</h5>
+    </div>
+    <div class="customer-info-grid">
+      <div class="customer-info-item"><span>Mobile</span><strong>${data.mobile_no || 'Not available'}</strong></div>
+      <div class="customer-info-item"><span>Alternate Mobile</span><strong>${data.mobile_no2 || 'Not available'}</strong></div>
+      <div class="customer-info-item"><span>Email</span><strong>${data.email || 'Not available'}</strong></div>
+      <div class="customer-info-item"><span>City</span><strong>${data.customer_city || data.city || 'Not available'}</strong></div>
+      <div class="customer-info-item"><span>Address</span><strong>${data.customer_address || data.address || 'Not available'}</strong></div>
     </div>
   </div>`;
+
+  html += renderAccountSummary(data);
 
   // Savings Account section FIRST (transaction_medium null => treat as "Savings")
   const savingsTxs = (data.recent_transactions || []).filter(
